@@ -1,0 +1,450 @@
+import 'dart:io';
+import 'package:demo/screens/wallet_dashboard.dart';
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/app_colors.dart';
+import '../services/onboarding_service.dart';
+import '../services/supabase_service.dart';
+import 'market_place_screen.dart';
+import '../new_flow/screens/welcome_screen.dart';
+
+class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({super.key});
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+  bool _isUploading = false;
+  bool _isCompletingOnboarding = false;
+
+  // Form controllers
+  final _companyNameController = TextEditingController();
+  final _companyDescriptionController = TextEditingController();
+
+  // Uploaded files
+  PlatformFile? _logoFile;
+  PlatformFile? _headshotFile;
+  PlatformFile? _voiceFile;
+  PlatformFile? _writingFile;
+  List<PlatformFile> _photos = [];
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _companyNameController.dispose();
+    _companyDescriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFile(String type) async {
+    FileType fileType = FileType.any;
+    List<String>? allowedExtensions;
+
+    if (type == 'logo' || type == 'headshot') {
+      fileType = FileType.image;
+    } else if (type == 'voice') {
+      fileType = FileType.custom;
+      allowedExtensions = ['mp3', 'wav', 'm4a'];
+    } else if (type == 'multi_image') {
+      fileType = FileType.image;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: fileType,
+        allowedExtensions: allowedExtensions,
+        allowMultiple: type == 'multi_image',
+        withData: true,
+      );
+
+      if (result != null) {
+        setState(() => _isUploading = true);
+
+        final file = result.files.first;
+        String? url;
+
+        if (type == 'logo') {
+          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/logo/logo.png');
+          if (url != null) {
+            await OnboardingService.updateOnboardingData({'logo_url': url});
+            setState(() => _logoFile = file);
+          }
+        } else if (type == 'headshot') {
+          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/headshot/headshot.png');
+          if (url != null) {
+            await OnboardingService.updateOnboardingData({'headshot_url': url});
+            setState(() => _headshotFile = file);
+          }
+        } else if (type == 'voice') {
+          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/voice/voice.${_ext(file.name)}');
+          if (url != null) {
+            await OnboardingService.updateOnboardingData({'voice_sample_url': url});
+            setState(() => _voiceFile = file);
+          }
+        } else if (type == 'writing') {
+          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/writing/sample.${_ext(file.name)}');
+          if (url != null) {
+            await OnboardingService.updateOnboardingData({'writing_sample': url});
+            setState(() => _writingFile = file);
+          }
+        } else if (type == 'multi_image') {
+          // Photos upload logic...
+          setState(() => _photos.addAll(result.files));
+        }
+
+        setState(() => _isUploading = false);
+      }
+    } catch (e) {
+      debugPrint('Error picking file: $e');
+      setState(() => _isUploading = false);
+    }
+  }
+
+  String _ext(String name) {
+    final dot = name.lastIndexOf('.');
+    return dot >= 0 ? name.substring(dot + 1).toLowerCase() : 'png';
+  }
+
+  Future<String?> _uploadFile(PlatformFile file, String bucketName, String path) async {
+    try {
+      final supabase = SupabaseService.instance.client;
+
+      await supabase.storage
+          .from(bucketName)
+          .uploadBinary(
+        path,
+        file.bytes!,
+        fileOptions: const FileOptions(upsert: true),
+      );
+
+      return supabase.storage.from(bucketName).getPublicUrl(path);
+    } catch (e) {
+      debugPrint('Error uploading to $bucketName: $e');
+      return null;
+    }
+  }
+
+  Future<void> _nextPage() async {
+    if (_currentPage < 6) { // Back to 7 steps total (0-6)
+      // Logic for each step validation/upload
+      bool canProceed = true;
+
+      if (_currentPage == 2) { // Company Name step
+        if (_companyNameController.text.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a company name')),
+          );
+          canProceed = false;
+        }
+      }
+
+      if (canProceed) {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    } else {
+      _completeOnboarding();
+    }
+  }
+
+  void _completeOnboarding() async {
+    setState(() => _isCompletingOnboarding = true);
+
+    try {
+      // Now we can save company_description since the column exists in the database
+      final data = {
+        'company_name': _companyNameController.text,
+        'company_description': _companyDescriptionController.text,
+        'onboarding_completed': true,
+        'onboarding_step': 7,
+      };
+
+      await OnboardingService.updateOnboardingData(data);
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const WalletDashboard()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving onboarding: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCompletingOnboarding = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                LinearProgressIndicator(
+                  value: (_currentPage + 1) / 7,
+                  backgroundColor: AppColors.cardBackground,
+                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.buttonGold),
+                ),
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentPage = index;
+                      });
+                    },
+                    children: [
+                      _buildUploadStep(
+                        'Upload Logo',
+                        'Your company logo will be used in your property listings.',
+                        Icons.business,
+                        _logoFile,
+                            () => _pickFile('logo'),
+                      ),
+                      _buildUploadStep(
+                        'Upload Headshot',
+                        'A professional headshot helps build trust with clients.',
+                        Icons.face,
+                        _headshotFile,
+                            () => _pickFile('headshot'),
+                      ),
+                      _buildInputStep(
+                        'Company Name',
+                        'What is the name of your real estate company?',
+                        Icons.domain,
+                        'Company Name',
+                        _companyNameController,
+                      ),
+                      _buildInputStep(
+                        'Company Description',
+                        'Tell us a bit about your company and your expertise.',
+                        Icons.description,
+                        'Company Description',
+                        _companyDescriptionController,
+                        maxLines: 4,
+                      ),
+                      _buildUploadStep(
+                        'Voice Sample',
+                        'Upload an MP3 sample of your voice for AI generation.',
+                        Icons.mic,
+                        _voiceFile,
+                            () => _pickFile('voice'),
+                        subtitle: 'Supported format: MP3',
+                      ),
+                      _buildUploadStep(
+                        'Writing Sample',
+                        'Upload a sample of your writing style (Email, Blog, etc.).',
+                        Icons.edit_note,
+                        _writingFile,
+                            () => _pickFile('writing'),
+                      ),
+                      _buildMultiPhotoStep(),
+                    ],
+                  ),
+                ),
+                _buildNavigationButtons(),
+              ],
+            ),
+            // Show loading overlay only when uploading files
+            if (_isUploading || _isCompletingOnboarding)
+              Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.buttonGold),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUploadStep(
+      String title,
+      String description,
+      IconData icon,
+      PlatformFile? file,
+      VoidCallback onPick, {
+        String? subtitle,
+      }) {
+    return Padding(
+      padding: const EdgeInsets.all(40.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 80, color: AppColors.buttonGold),
+          const SizedBox(height: 32),
+          Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 16),
+          Text(description, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
+          if (subtitle != null) ...[
+            const SizedBox(height: 8),
+            Text(subtitle, style: const TextStyle(color: Colors.white30, fontSize: 12)),
+          ],
+          const SizedBox(height: 48),
+          _buildFilePreview(file, onPick),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilePreview(PlatformFile? file, VoidCallback onPick) {
+    return InkWell(
+      onTap: onPick,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.buttonGold.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(file != null ? Icons.check_circle : Icons.upload_file, color: AppColors.buttonGold),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                file != null ? file.name : 'Choose File',
+                style: const TextStyle(color: AppColors.textPrimary),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputStep(
+      String title,
+      String description,
+      IconData icon,
+      String label,
+      TextEditingController controller, {
+        int maxLines = 1,
+      }) {
+    return Padding(
+      padding: const EdgeInsets.all(40.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 80, color: AppColors.buttonGold),
+          const SizedBox(height: 32),
+          Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 16),
+          Text(description, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
+          const SizedBox(height: 40),
+          TextField(
+            controller: controller,
+            maxLines: maxLines,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: label,
+              hintStyle: const TextStyle(color: Colors.white24),
+              filled: true,
+              fillColor: AppColors.cardBackground,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.buttonGold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMultiPhotoStep() {
+    return Padding(
+      padding: const EdgeInsets.all(40.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.collections, size: 80, color: AppColors.buttonGold),
+          const SizedBox(height: 32),
+          const Text('Photos Upload', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 16),
+          const Text('Share some of your best property photos or lifestyle shots.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
+          const SizedBox(height: 32),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ..._photos.map((f) => Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
+                child: const Icon(Icons.image, color: Colors.white30, size: 20),
+              )),
+              InkWell(
+                onTap: () => _pickFile('multi_image'),
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: AppColors.buttonGold.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppColors.buttonGold.withOpacity(0.3)),
+                  ),
+                  child: const Icon(Icons.add, color: AppColors.buttonGold),
+                ),
+              ),
+            ],
+          ),
+          if (_photos.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text('${_photos.length} photos selected', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavigationButtons() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Row(
+        children: [
+          if (_currentPage > 0)
+            TextButton(
+              onPressed: () {
+                _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+              },
+              child: const Text('Previous', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+            ),
+          const Spacer(),
+          ElevatedButton(
+            onPressed: _nextPage,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.buttonGold,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text(
+              _currentPage == 6 ? 'Complete Onboarding' : 'Next',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,0 +1,41 @@
+project_id = "macenrukodfgfeowrqqf"
+
+[functions.fub-auth]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/fub-auth/index.ts"
+
+[functions.fub-callback]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/fub-callback/index.ts"
+
+[functions.ghl_connect_private]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ghl_connect_private/index.ts"
+
+[functions.ghl_sync_contacts]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ghl_sync_contacts/index.ts"
+
+[functions.payment-cancel]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/payment-cancel/index.ts"
+
+[functions.payment-success]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/payment-success/index.ts"
+
+[functions.create-checkout-session]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-checkout-session/index.ts"
+
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"

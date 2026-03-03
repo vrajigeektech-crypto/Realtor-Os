@@ -1,0 +1,92 @@
+import '../widgets/user_widgets.dart';
+
+/// User List Item model for user management table
+/// Maps to RPC response for user list
+class UserListItem {
+  final String id;
+  final String name;
+  final String email;
+  final String role;
+  final String status;
+  final DateTime? lastLogin;
+  final int totalOrders;
+  final int tokenBalance;
+  final bool hasFlags;
+
+  UserListItem({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.status,
+    this.lastLogin,
+    required this.totalOrders,
+    required this.tokenBalance,
+    required this.hasFlags,
+  });
+
+  factory UserListItem.fromJson(Map<String, dynamic> json) {
+    // Parse last_login
+    DateTime? lastLogin;
+    final lastLoginStr = json['last_login'] as String? ?? json['lastLogin'] as String?;
+    if (lastLoginStr != null && lastLoginStr.isNotEmpty) {
+      try {
+        lastLogin = DateTime.parse(lastLoginStr);
+      } catch (e) {
+        lastLogin = null;
+      }
+    }
+
+    return UserListItem(
+      id: json['id'] as String? ?? json['user_id'] as String? ?? '',
+      name: json['name'] as String? ?? json['full_name'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      role: json['role'] as String? ?? 'Agent',
+      status: json['status'] as String? ?? 'active',
+      lastLogin: lastLogin,
+      totalOrders: json['total_orders'] as int? ?? json['totalOrders'] as int? ?? 0,
+      tokenBalance: json['token_balance'] as int? ?? json['tokenBalance'] as int? ?? 0,
+      hasFlags: json['has_flags'] as bool? ?? json['hasFlags'] as bool? ?? false,
+    );
+  }
+
+  /// Format last login for display
+  String get formattedLastLogin {
+    if (lastLogin == null) return 'Never';
+    
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final loginDate = DateTime(lastLogin!.year, lastLogin!.month, lastLogin!.day);
+    
+    if (loginDate == today) {
+      final hour = lastLogin!.hour;
+      final minute = lastLogin!.minute;
+      final period = hour >= 12 ? 'pm' : 'am';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      return 'Today · $displayHour:${minute.toString().padLeft(2, '0')} $period';
+    } else if (loginDate == yesterday) {
+      final hour = lastLogin!.hour;
+      final minute = lastLogin!.minute;
+      final period = hour >= 12 ? 'pm' : 'am';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      return 'Yesterday · $displayHour:${minute.toString().padLeft(2, '0')} $period';
+    } else {
+      return '${lastLogin!.month.toString().padLeft(2, '0')}/${lastLogin!.day.toString().padLeft(2, '0')}/${lastLogin!.year}';
+    }
+  }
+
+  /// Convert to UserRowData for display
+  UserRowData toUserRowData() {
+    return UserRowData(
+      name: name,
+      email: email,
+      role: role,
+      status: status == 'active' ? 'Active' : (status == 'inactive' ? 'Inactive' : 'Suspended'),
+      lastLogin: formattedLastLogin,
+      totalOrders: totalOrders > 0 ? totalOrders.toString() : '--',
+      tokenBalance: tokenBalance > 0 ? tokenBalance.toString() : '--',
+      hasFlags: hasFlags,
+    );
+  }
+}
