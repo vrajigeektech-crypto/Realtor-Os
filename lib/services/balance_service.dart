@@ -32,7 +32,9 @@ class BalanceService {
         final balance = await WalletDashboardService.getWalletBalance(wallet['id']);
         if (balance != null) {
           _currentBalance = balance;
-          _balanceController.add(_currentBalance);
+          if (!_balanceController.isClosed) {
+            _balanceController.add(_currentBalance);
+          }
         }
       }
     } catch (e) {
@@ -52,7 +54,9 @@ class BalanceService {
           final balance = await WalletDashboardService.getWalletBalance(walletData['id']);
           if (balance != null && balance != _currentBalance) {
             _currentBalance = balance;
-            _balanceController.add(_currentBalance);
+            if (!_balanceController.isClosed) {
+              _balanceController.add(_currentBalance);
+            }
           }
         }
       });

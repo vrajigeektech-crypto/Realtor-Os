@@ -6,7 +6,14 @@ import 'complete_purchase_screen.dart';
 import 'wallet_dashboard.dart';
 
 class PurchaseTokensScreen extends StatefulWidget {
-  const PurchaseTokensScreen({super.key});
+  final int? requiredTokens;
+  final VoidCallback? onPurchaseComplete;
+  
+  const PurchaseTokensScreen({
+    super.key,
+    this.requiredTokens,
+    this.onPurchaseComplete,
+  });
 
   @override
   State<PurchaseTokensScreen> createState() => _PurchaseTokensScreenState();
@@ -28,6 +35,12 @@ class _PurchaseTokensScreenState extends State<PurchaseTokensScreen> {
     super.initState();
     // Initialize wallet service to ensure transactions table exists
     WalletDashboardService.initialize();
+    
+    // Set initial token amount if requiredTokens is provided
+    if (widget.requiredTokens != null) {
+      _tokenController.text = widget.requiredTokens.toString();
+    }
+    
     _loadWalletData();
   }
 
@@ -70,6 +83,8 @@ class _PurchaseTokensScreenState extends State<PurchaseTokensScreen> {
         isLoading: _isLoading,
         onRefresh: _loadWalletData,
         tokenController: _tokenController,
+        requiredTokens: widget.requiredTokens,
+        onPurchaseComplete: widget.onPurchaseComplete,
       ),
     );
   }
@@ -80,12 +95,16 @@ class _PurchaseTokensLayout extends StatefulWidget {
   final bool isLoading;
   final VoidCallback onRefresh;
   final TextEditingController tokenController;
+  final int? requiredTokens;
+  final VoidCallback? onPurchaseComplete;
 
   const _PurchaseTokensLayout({
     required this.wallet,
     required this.isLoading,
     required this.onRefresh,
     required this.tokenController,
+    this.requiredTokens,
+    this.onPurchaseComplete,
   });
 
   @override
@@ -126,7 +145,9 @@ class _PurchaseTokensLayoutState extends State<_PurchaseTokensLayout> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Purchase ${widget.tokenController.text} Tokens',
+                  widget.requiredTokens != null 
+                      ? 'Buy ${widget.tokenController.text} Tokens (Minimum Required)'
+                      : 'Purchase ${widget.tokenController.text} Tokens',
                   style: const TextStyle(
                     color: accentRose,
                     fontSize: 28,
@@ -154,7 +175,11 @@ class _PurchaseTokensLayoutState extends State<_PurchaseTokensLayout> {
                     return SingleChildScrollView(
                       child: Column(
                         children: [
-                          _PaymentFormCard(tokenController: widget.tokenController),
+                          _PaymentFormCard(
+                            tokenController: widget.tokenController,
+                            requiredTokens: widget.requiredTokens,
+                            onPurchaseComplete: widget.onPurchaseComplete,
+                          ),
                           const SizedBox(height: 24),
                           _TokenSummaryCard(tokenController: widget.tokenController),
                         ],
@@ -164,7 +189,11 @@ class _PurchaseTokensLayoutState extends State<_PurchaseTokensLayout> {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: _PaymentFormCard(tokenController: widget.tokenController)),
+                      Expanded(child: _PaymentFormCard(
+                        tokenController: widget.tokenController,
+                        requiredTokens: widget.requiredTokens,
+                        onPurchaseComplete: widget.onPurchaseComplete,
+                      )),
                       const SizedBox(width: 24),
                       SizedBox(width: 320, child: _TokenSummaryCard(tokenController: widget.tokenController)),
                     ],
@@ -201,8 +230,14 @@ class _CardShell extends StatelessWidget {
 
 class _PaymentFormCard extends StatefulWidget {
   final TextEditingController tokenController;
+  final int? requiredTokens;
+  final VoidCallback? onPurchaseComplete;
   
-  const _PaymentFormCard({required this.tokenController});
+  const _PaymentFormCard({
+    required this.tokenController,
+    this.requiredTokens,
+    this.onPurchaseComplete,
+  });
 
   @override
   State<_PaymentFormCard> createState() => _PaymentFormCardState();
@@ -240,9 +275,13 @@ class _PaymentFormCardState extends State<_PaymentFormCard> {
               filled: true,
               fillColor: const Color(0xFF141414),
               prefixIcon: const Icon(Icons.token, color: Color(0xFFCE9799), size: 20),
-              labelText: 'Number of Tokens',
+              labelText: widget.requiredTokens != null 
+                  ? 'Minimum ${widget.requiredTokens} tokens required'
+                  : 'Number of Tokens',
               labelStyle: const TextStyle(color: Color(0xFF9EA3AE)),
-              hintText: 'Enter token amount',
+              hintText: widget.requiredTokens != null 
+                  ? 'Enter at least ${widget.requiredTokens} tokens'
+                  : 'Enter token amount',
               hintStyle: const TextStyle(color: Color(0xFF9EA3AE)),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               enabledBorder: OutlineInputBorder(
@@ -296,7 +335,7 @@ class _PaymentFormCardState extends State<_PaymentFormCard> {
             ),
           ),
           const SizedBox(height: 18),
-          _PurchaseButton(tokenController: widget.tokenController),
+          _PurchaseButton(tokenController: widget.tokenController, requiredTokens: widget.requiredTokens, onPurchaseComplete: widget.onPurchaseComplete,),
           const SizedBox(height: 10),
           const Text(
             'You can cancel anytime.\nYour card details are encrypted and secure.',
@@ -468,8 +507,14 @@ class _SummaryRow extends StatelessWidget {
 
 class _PurchaseButton extends StatefulWidget {
   final TextEditingController tokenController;
+  final int? requiredTokens;
+  final VoidCallback? onPurchaseComplete;
   
-  const _PurchaseButton({required this.tokenController});
+  const _PurchaseButton({
+    required this.tokenController,
+    this.requiredTokens,
+    this.onPurchaseComplete,
+  });
 
   @override
   State<_PurchaseButton> createState() => _PurchaseButtonState();
@@ -484,6 +529,20 @@ class _PurchaseButtonState extends State<_PurchaseButton> {
     try {
       // Get token amount from controller
       final tokenAmount = int.tryParse(widget.tokenController.text) ?? 0;
+      
+      // Validate minimum required tokens if specified
+      if (widget.requiredTokens != null && tokenAmount < widget.requiredTokens!) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Minimum ${widget.requiredTokens} tokens required'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
       
       if (tokenAmount <= 0) {
         if (mounted) {
@@ -541,14 +600,20 @@ class _PurchaseButtonState extends State<_PurchaseButton> {
               ),
             );
             
-            Future.delayed(const Duration(seconds: 2), () {
-              if (mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const WalletDashboard()),
-                  (route) => false,
-                );
-              }
-            });
+            // Call onPurchaseComplete callback if provided
+            if (widget.onPurchaseComplete != null) {
+              widget.onPurchaseComplete!();
+            } else {
+              // Default behavior: navigate to wallet dashboard
+              Future.delayed(const Duration(seconds: 2), () {
+                if (mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const WalletDashboard()),
+                    (route) => false,
+                  );
+                }
+              });
+            }
           }
         }
       } catch (fallbackError) {

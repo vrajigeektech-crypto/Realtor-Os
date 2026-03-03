@@ -102,6 +102,8 @@ class WalletDashboardService {
     String? referenceId,
   }) async {
     try {
+      debugPrint('🔄 [WalletService] Adding transaction: walletId=$walletId, type=$type, amount=$amount');
+      
       // Insert transaction into token_ledger table
       final transaction = await _client
           .from('token_ledger')
@@ -114,6 +116,8 @@ class WalletDashboardService {
           })
           .select()
           .single();
+      
+      debugPrint('✅ [WalletService] Transaction added successfully: ${transaction['id']}');
       
       return {
         'success': true,
@@ -213,7 +217,7 @@ class WalletDashboardService {
         .from('wallets')
         .stream(primaryKey: ['id'])
         .eq('id', walletId)
-        .map((data) => data.first);
+        .map((data) => data.isNotEmpty ? data.first : <String, dynamic>{});
   }
 
   /// Listen to transaction changes in real-time - using token_ledger

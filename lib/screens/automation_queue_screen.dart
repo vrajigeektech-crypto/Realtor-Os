@@ -1,39 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../layout/main_layout.dart';
-import '../utils/app_styles.dart';
+import '../core/app_colors.dart';
+import '../services/recommendation_service.dart';
+import '../core/app_styles.dart';
 
-class AutomationQueueScreen extends StatelessWidget {
+class AutomationQueueScreen extends StatefulWidget {
   const AutomationQueueScreen({super.key});
+
+  @override
+  State<AutomationQueueScreen> createState() => _AutomationQueueScreenState();
+}
+
+class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
+  final RecommendationService _recommendationService = RecommendationService();
+  List<QueueItem> _queueItems = [];
+  bool _isLoading = true;
+  String _selectedStatus = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQueueItems();
+  }
+
+  Future<void> _loadQueueItems() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final queueItems = await _recommendationService.getAutomationQueue(userId);
+      
+      print('=== QUEUE ITEMS DEBUG ===');
+      for (var item in queueItems) {
+        print('Title: ${item.promotionTitle}, Tokens: ${item.tokensDeducted}, Status: ${item.status}');
+      }
+      print('========================');
+      
+      setState(() {
+        _queueItems = queueItems;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      // Handle error silently for now
+    }
+  }
+
+  List<QueueItem> get _filteredItems {
+    if (_selectedStatus == 'all') return _queueItems;
+    return _queueItems.where((item) => item.status == _selectedStatus).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MainLayout(
+      activeIndex: 11,
       title: 'Automation Queue',
-      activeIndex: 4,
-      child: const _AutomationQueueLayout(),
-    );
-  }
-}
-
-class _AutomationQueueLayout extends StatefulWidget {
-  const _AutomationQueueLayout();
-
-  @override
-  State<_AutomationQueueLayout> createState() => _AutomationQueueLayoutState();
-}
-
-class _AutomationQueueLayoutState extends State<_AutomationQueueLayout> {
-  int _tabIndex = 0; // "Running" sub-tab
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: AppStyles.fidelityBackgroundDecoration(),
-      child: Column(
-        children: [
-          _buildHeader(),
-          Expanded(child: _buildMainContent()),
-        ],
+      child: Container(
+        decoration: AppStyles.fidelityBackgroundDecoration(),
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(child: _buildMainContent()),
+          ],
+        ),
       ),
     );
   }
@@ -44,250 +83,224 @@ class _AutomationQueueLayoutState extends State<_AutomationQueueLayout> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Automation Queue',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Monitor, pause, or resume automated workflows currently active in the system.',
-            style: TextStyle(color: AppStyles.mutedText, fontSize: 16),
-          ),
-          const SizedBox(height: 32),
-          _buildTabs(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabs() {
-    final tabs = ['Running', 'Scheduled', 'Paused', 'Review Required', 'History'];
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.white10)),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: tabs
-              .asMap()
-              .entries
-              .map(
-                (e) => InkWell(
-                  onTap: () => setState(() => _tabIndex = e.key),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 20,
-                    ),
-                    decoration: BoxDecoration(
-                      color: e.key == _tabIndex
-                          ? Colors.white.withValues(alpha: 0.02)
-                          : Colors.transparent,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: e.key == _tabIndex
-                              ? AppStyles.accentRose
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      e.value,
-                      style: TextStyle(
-                        color: e.key == _tabIndex
-                            ? Colors.white
-                            : AppStyles.mutedText,
-                        fontSize: 14,
-                        fontWeight: e.key == _tabIndex
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMainContent() {
-    return ListView(
-      padding: const EdgeInsets.all(40),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Currently Running (3 workflows)',
-              style: TextStyle(
-                color: AppStyles.copperBrush,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Row(
-              children: [
-                _buildFilterButton('Sort by: Oldest First'),
-                const SizedBox(width: 12),
-                _buildFilterButton('Filter: All Agents'),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        _buildWorkflowCard(
-          'Automated Lead Nurturing Sequence',
-          'Agent: Communications Bot',
-          'Running for 2h 15m. 4/12 leads processed.',
-          0.33,
-          'Active',
-        ),
-        const SizedBox(height: 16),
-        _buildWorkflowCard(
-          'Daily MLS Data Sync',
-          'Agent: Data Harvester',
-          'Running for 14m. Fetching new listings...',
-          0.85,
-          'Active',
-        ),
-        const SizedBox(height: 16),
-        _buildWorkflowCard(
-          'Review Requested Documents',
-          'Agent: Compliance Assistant',
-          'Running for 3h. Analyzing contract anomalies.',
-          0.60,
-          'Review Needed',
-          statusColor: const Color(0xFFC05A5A),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterButton(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          Text(text, style: const TextStyle(color: AppStyles.mutedText, fontSize: 13)),
-          const SizedBox(width: 8),
-          const Icon(Icons.arrow_drop_down, color: AppStyles.mutedText, size: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWorkflowCard(
-      String title, String agent, String desc, double progress, String status,
-      {Color? statusColor}) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: AppStyles.premiumCardDecoration(
-        color: Colors.black.withValues(alpha: 0.2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
+              const Text(
+                'Automation Queue',
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 32,
                   fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (statusColor ?? AppStyles.statusGreen).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                      color: (statusColor ?? AppStyles.statusGreen)
-                          .withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  status,
-                  style: TextStyle(
-                    color: statusColor ?? AppStyles.statusGreen,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'OST Balance: 8021.00',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'VA Assignments: 3',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4A373).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'VA Assignments: Operational',
+                      style: TextStyle(
+                        color: Color(0xFFD4A373),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    onPressed: _loadQueueItems,
+                    icon: const Icon(
+                      Icons.refresh,
+                      color: Colors.white,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.1),
+                      padding: const EdgeInsets.all(8),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            agent,
-            style: const TextStyle(color: AppStyles.copperBrush, fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          Text(desc, style: const TextStyle(color: AppStyles.mutedText, fontSize: 14)),
-          const SizedBox(height: 24),
-          Stack(
-            children: [
-              Container(
-                height: 4,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              FractionallySizedBox(
-                widthFactor: progress,
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: statusColor ?? AppStyles.accentRose,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () {},
-                child: const Text(
-                  'Pause',
-                  style: TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                decoration: AppStyles.subtleButtonDecoration(),
-                child: TextButton(
-                  onPressed: () {},
-                  style:
-                      TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20)),
-                  child: const Text(
-                    'View Details',
-                    style: TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+    final ampm = date.hour >= 12 ? 'PM' : 'AM';
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '${months[date.month - 1]} ${date.day.toString().padLeft(2, '0')}, ${date.year} • ${hour.toString().padLeft(2, '0')}:$minute $ampm';
+  }
+
+  String _formatStatus(String status) {
+    switch (status) {
+      case 'scheduled':
+        return 'Scheduled';
+      case 'processing':
+        return 'Processing';
+      case 'completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      default:
+        return 'Scheduled';
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'processing':
+        return Colors.orange;
+      case 'completed':
+        return Colors.green;
+      case 'failed':
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  Widget _buildMainContent() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final items = _filteredItems;
+
+    if (items.isEmpty) {
+      return const Center(
+        child: Text(
+          'No automation tasks found.',
+          style: TextStyle(color: Colors.white54, fontSize: 16),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadQueueItems,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(40),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 16),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return _buildQueueItemCard(
+            title: item.promotionTitle,
+            status: _formatStatus(item.status),
+            queuedTime: _formatDate(item.queuedAt),
+            tokens: item.tokensDeducted,
+            statusColor: _statusColor(item.status),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildQueueItemCard({
+    required String title,
+    required String status,
+    required String queuedTime,
+    required int tokens,
+    Color statusColor = Colors.blue,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF4A3436)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '-$tokens tokens',
+                  style: const TextStyle(
+                    color: AppColors.roseGold,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Queued: $queuedTime',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

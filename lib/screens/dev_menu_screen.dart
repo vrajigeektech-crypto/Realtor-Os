@@ -8,7 +8,7 @@ import 'agent_detail_profile_screen.dart';
 import 'agent_security_screen.dart';
 import 'agent_spend_summary_compact_screen.dart';
 import 'agent_tasks_queue_screen.dart';
-import 'automation_queue_screen.dart';
+import 'automation_queue_screen_new.dart';
 import 'checkout_confirmation_ready_screen.dart';
 import 'complete_purchase_screen.dart'; // New
 import 'connect_your_tools_screen.dart';

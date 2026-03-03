@@ -216,6 +216,7 @@ class MarketPlaceScreen extends StatelessWidget {
               }
 
               return _buildPlanCard({
+                'id': item['id'], // Add the ID to the data map
                 'platform': platform,
                 'icon': icon,
                 'title': item['title'] ?? 'Recommendation',

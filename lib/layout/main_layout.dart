@@ -13,6 +13,8 @@ import '../new_flow/Core Money Engine/speed_to_lead_metric_model.dart';
 import '../new_flow/Core Money Engine/lead_arrival_model.dart';
 import '../new_flow/Core Money Engine/speed_to_lead_metric_key.dart';
 import '../screens/wallet_screen.dart';
+import '../screens/recommendation_screen.dart';
+import '../screens/automation_queue_screen_new.dart';
 import '../services/balance_service.dart';
 // TODO: Re-enable when screens are implemented
 // import '../screens/calendar/calendar_screen.dart';
@@ -513,6 +515,20 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                   _buildSidebarItem(
                     context,
+                    Icons.recommend_outlined,
+                    'Promotions',
+                    15,
+                    isDrawer: isDrawer,
+                  ),
+                  _buildSidebarItem(
+                    context,
+                    Icons.queue_play_next,
+                    'Queue',
+                    16,
+                    isDrawer: isDrawer,
+                  ),
+                  _buildSidebarItem(
+                    context,
                     Icons.settings_outlined,
                     'Settings',
                     6,
@@ -749,6 +765,16 @@ class _MainLayoutState extends State<MainLayout> {
           context,
           MaterialPageRoute(builder: (context) => const MainLayoutWrapper(activeIndex: 14)),
         );
+      } else if (index == 15 && widget.activeIndex != 15) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MainLayoutWrapper(activeIndex: 15)),
+        );
+      } else if (index == 16 && widget.activeIndex != 16) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MainLayoutWrapper(activeIndex: 16)),
+        );
       }
     }
   }
@@ -806,6 +832,10 @@ class MainLayoutWrapper extends StatelessWidget {
         return 'Google Integrations';
       case 14:
         return 'Speed to Lead';
+      case 15:
+        return 'Promotion Marketplace';
+      case 16:
+        return 'Automation Queue';
       default:
         return 'Realtor OS';
     }
@@ -891,6 +921,10 @@ class MainLayoutWrapper extends StatelessWidget {
         return const GoogleIntegrationsScreen();
       case 14:
         return const SpeedToLeadScreenWrapper();
+      case 15:
+        return const RecommendationScreen();
+      case 16:
+        return const AutomationQueueScreen();
       default:
         return DashboardScreen();
     }

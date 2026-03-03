@@ -1,10 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/app_colors.dart';
 import '../widgets/content_card.dart';
+import '../screens/review_recommendation_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  void _navigateToReview(BuildContext context, Map<String, dynamic> recommendation) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ReviewRecommendationScreen(recommendation: recommendation),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -175,8 +188,16 @@ class DashboardScreen extends StatelessWidget {
                       title: "TikTok Listing Walkthrough",
                       status: "Ready",
                       tokens: 5,
-                      onApprove: () => print("TikTok Approved"),
-                    ),
+                      onApprove: () => _navigateToReview(context, {
+                        'id': '1',
+                        'title': 'TikTok Listing Walkthrough',
+                        'platform': 'TikTok',
+                        'category': 'Social Media Content',
+                        'token_cost': 5,
+                        'status': 'Ready',
+                        'description': 'Create engaging TikTok walkthrough of your latest listing',
+                      }),
+                    ),  
 
                     // 2. Instagram Card
                     ContentCard(
@@ -185,7 +206,15 @@ class DashboardScreen extends StatelessWidget {
                       title: "Instagram Market Insight",
                       status: "Ready",
                       tokens: 3,
-                      onApprove: () => print("IG Approved"),
+                      onApprove: () => _navigateToReview(context, {
+                        'id': '2',
+                        'title': 'Instagram Market Insight',
+                        'platform': 'Instagram',
+                        'category': 'Market Update',
+                        'token_cost': 3,
+                        'status': 'Ready',
+                        'description': 'Share latest market trends with your Instagram followers',
+                      }),
                     ),
 
                     // 3. YouTube Shorts Card
@@ -193,9 +222,17 @@ class DashboardScreen extends StatelessWidget {
                       platform: "YouTube Shorts",
                       imageUrl: "assets/images/img_youtube_woman.jpg",
                       title: "Buyer Tip Walkthrough",
-                      status: "3 Tokens",
+                      status: "Ready",
                       tokens: 4,
-                      onApprove: () => print("YT Approved"),
+                      onApprove: () => _navigateToReview(context, {
+                        'id': '3',
+                        'title': 'Buyer Tip Walkthrough',
+                        'platform': 'YouTube Shorts',
+                        'category': 'Educational Content',
+                        'token_cost': 4,
+                        'status': 'Ready',
+                        'description': 'Help first-time buyers with essential tips',
+                      }),
                     ),
 
                     // 4. LinkedIn Card
@@ -205,7 +242,15 @@ class DashboardScreen extends StatelessWidget {
                       title: "AI Calling Campaign",
                       status: "In Progress",
                       tokens: 2,
-                      onApprove: () => print("LinkedIn Approved"),
+                      onApprove: () => _navigateToReview(context, {
+                        'id': '4',
+                        'title': 'AI Calling Campaign',
+                        'platform': 'LinkedIn',
+                        'category': 'Lead Generation',
+                        'token_cost': 2,
+                        'status': 'In Progress',
+                        'description': 'AI-powered calling campaign for qualified leads',
+                      }),
                     ),
 
                     // 5. AI Calling Card
@@ -213,9 +258,17 @@ class DashboardScreen extends StatelessWidget {
                       platform: "AI Calling",
                       imageUrl: "assets/images/img_office_bg.jpg",
                       title: "AI Calling Campaign",
-                      status: "2 Tokens",
-                      tokens: 0,
-                      onApprove: () => print("AI Call Approved"),
+                      status: "Ready",
+                      tokens: 8,
+                      onApprove: () => _navigateToReview(context, {
+                        'id': '5',
+                        'title': 'AI Calling Campaign',
+                        'platform': 'AI Calling',
+                        'category': 'Lead Generation',
+                        'token_cost': 8,
+                        'status': 'Ready',
+                        'description': 'AI-powered calling campaign for qualified leads',
+                      }),
                     ),
                   ],
                 ),
