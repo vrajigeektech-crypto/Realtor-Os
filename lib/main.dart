@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:demo/admin_pannel/admin_main_screen.dart';
 import 'package:demo/screens/agent_wallet_screen.dart';
 import 'package:demo/screens/broker_wallet_screen.dart';
 import 'package:demo/screens/dashboard_screen.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:get/get.dart';
 import 'screens/login_screen.dart';
+import 'admin_pannel/admin_login_screen.dart';
 import 'core/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'services/supabase_service.dart';
@@ -202,6 +204,7 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
               body: Center(child: CircularProgressIndicator()),
             )
           : SupabaseService.instance.client.auth.currentSession == null
+          // ? AdminLoginScreen()
           ? LoginScreen(onLoginSuccess: () => _checkStatus())
           : !_onboardingCompleted
           ? Column(
@@ -223,8 +226,9 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
                 ),
               ],
             )
-          : MainLayoutWrapper(activeIndex: 0),
-      routes: {
+      : AdminMainScreen(),
+      // : MainLayoutWrapper(activeIndex: 0),
+    routes: {
         // New flow routes
         '/new_flow/welcome': (context) => const NewFlowWelcomeScreen(),
         '/new_flow/setup_profile': (context) => const NewFlowProfileSetupScreen(),

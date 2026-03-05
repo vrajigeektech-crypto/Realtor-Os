@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../models/agent_profile_card_stats.dart';
 import '../models/user_list_item.dart';
+import '../models/enhanced_user_list_item.dart';
 // import '../models/agent_spending_models.dart'; // Removed as spending RPCs moved to AgentSpendingService
 import 'supabase_service.dart';
 import 'rpc_client.dart';
@@ -111,6 +112,56 @@ class UserService {
       debugPrint('❌ [UserService] get_users_list failed: $e');
       debugPrint('   Stack: $stackTrace');
       throw Exception('Failed to fetch users list: $e');
+    }
+  }
+
+  /// #DATA: get_enhanced_users_list
+  /// RPC: get_users_list (enhanced version with all fields)
+  /// Inputs: none (uses auth.uid() for permissions)
+  /// Output: List<EnhancedUserListItem>
+  Future<List<EnhancedUserListItem>> getEnhancedUsersList() async {
+    try {
+      debugPrint('📡 [UserService] Calling get_enhanced_users_list...');
+      final response = await _rpc.callRpc('get_users_list');
+      if (response == null) {
+        throw Exception('get_users_list returned null');
+      }
+
+      List<dynamic> usersList;
+      if (response is List) {
+        usersList = response;
+      } else if (response is Map && response.containsKey('users')) {
+        usersList = response['users'] as List<dynamic>? ?? [];
+      } else {
+        debugPrint(
+          '⚠️ [UserService] Unexpected response format: ${response.runtimeType}',
+        );
+        return [];
+      }
+
+      final users = usersList
+          .map((user) {
+            try {
+              if (user is Map<String, dynamic>) {
+                return EnhancedUserListItem.fromJson(user);
+              } else if (user is Map) {
+                return EnhancedUserListItem.fromJson(Map<String, dynamic>.from(user));
+              }
+              return null;
+            } catch (e) {
+              debugPrint('❌ [UserService] Error parsing enhanced user: $e');
+              return null;
+            }
+          })
+          .whereType<EnhancedUserListItem>()
+          .toList();
+
+      debugPrint('✅ [UserService] Parsed ${users.length} enhanced users');
+      return users;
+    } catch (e, stackTrace) {
+      debugPrint('❌ [UserService] get_enhanced_users_list failed: $e');
+      debugPrint('   Stack: $stackTrace');
+      throw Exception('Failed to fetch enhanced users list: $e');
     }
   }
 

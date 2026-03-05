@@ -6,6 +6,7 @@ class AppStyles {
   static const Color tableColor = Color(0xFF1E1E1E);
   static const Color borderSoft = Color(0xFF3E3144);
   static const Color accentRose = Color(0xFFCE9799);
+  static const Color accentColor = Color(0xFFCE9799); // Alias
   static const Color mutedText = Color(0xFF9EA3AE);
   static const Color darkBackground = Color(0xFF141414);
 
@@ -13,7 +14,9 @@ class AppStyles {
   static const Color statusGreen = Color(0xFF35C86B);
   static const Color statusYellow = Colors.amber;
   static const Color statusRed = Color(0xFFE05C4D);
+  static const Color statusGray = Color(0xFF6B7280);
   static const Color copperBrush = Color(0xFFCE9799);
+  static const Color selectedColor = Color(0xFF2A2438);
 
   // Decorations
   static BoxDecoration glassPanelDecoration = BoxDecoration(

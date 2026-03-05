@@ -45,7 +45,11 @@ class UserListItem {
       status: json['status'] as String? ?? 'active',
       lastLogin: lastLogin,
       totalOrders: json['total_orders'] as int? ?? json['totalOrders'] as int? ?? 0,
-      tokenBalance: json['token_balance'] as int? ?? json['tokenBalance'] as int? ?? 0,
+      tokenBalance: (json['token_balance'] is num 
+                  ? json['token_balance'].toInt() 
+                  : (json['token_balance'] as String? ?? '').isNotEmpty 
+                    ? int.tryParse(json['token_balance'] as String) ?? 0
+                    : (json['token_balance'] as int? ?? 0)),
       hasFlags: json['has_flags'] as bool? ?? json['hasFlags'] as bool? ?? false,
     );
   }
@@ -54,26 +58,8 @@ class UserListItem {
   String get formattedLastLogin {
     if (lastLogin == null) return 'Never';
     
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final loginDate = DateTime(lastLogin!.year, lastLogin!.month, lastLogin!.day);
-    
-    if (loginDate == today) {
-      final hour = lastLogin!.hour;
-      final minute = lastLogin!.minute;
-      final period = hour >= 12 ? 'pm' : 'am';
-      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-      return 'Today · $displayHour:${minute.toString().padLeft(2, '0')} $period';
-    } else if (loginDate == yesterday) {
-      final hour = lastLogin!.hour;
-      final minute = lastLogin!.minute;
-      final period = hour >= 12 ? 'pm' : 'am';
-      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-      return 'Yesterday · $displayHour:${minute.toString().padLeft(2, '0')} $period';
-    } else {
-      return '${lastLogin!.month.toString().padLeft(2, '0')}/${lastLogin!.day.toString().padLeft(2, '0')}/${lastLogin!.year}';
-    }
+    // Always show date format: MM/DD/YYYY
+    return '${lastLogin!.month.toString().padLeft(2, '0')}/${lastLogin!.day.toString().padLeft(2, '0')}/${lastLogin!.year}';
   }
 
   /// Convert to UserRowData for display
