@@ -11,6 +11,7 @@ class UserListItem {
   final DateTime? lastLogin;
   final int totalOrders;
   final int tokenBalance;
+  final int approvedQueueCount;
   final bool hasFlags;
 
   UserListItem({
@@ -22,6 +23,7 @@ class UserListItem {
     this.lastLogin,
     required this.totalOrders,
     required this.tokenBalance,
+    required this.approvedQueueCount,
     required this.hasFlags,
   });
 
@@ -50,6 +52,7 @@ class UserListItem {
                   : (json['token_balance'] as String? ?? '').isNotEmpty 
                     ? int.tryParse(json['token_balance'] as String) ?? 0
                     : (json['token_balance'] as int? ?? 0)),
+      approvedQueueCount: json['approved_queue_count'] as int? ?? 0,
       hasFlags: json['has_flags'] as bool? ?? json['hasFlags'] as bool? ?? false,
     );
   }

@@ -205,10 +205,11 @@ class RecommendationService {
 
       // Add to automation queue using RPC function
       try {
+        print('DEBUG: Creating automation task with userId: $userId, promotionId: $promotionId, status: pending');
         final result = await Supabase.instance.client.rpc('create_automation_task', params: {
           'p_user_id': userId,
           'p_task_type': promotionId,
-          'p_status': 'queued',
+          'p_status': 'pending', // Changed from 'queued' to 'pending' for approval workflow
         });
         
         print('Automation task created successfully: $result');
@@ -280,6 +281,27 @@ class RecommendationService {
       print('Error fetching automation queue: $e');
       return [];
     }
+  }
+
+  Stream<List<QueueItem>> getAutomationQueueStream(String userId) {
+    return Supabase.instance.client
+        .from('automation_tasks')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('created_at', ascending: false)
+        .map((data) {
+          return data.map((row) {
+            return QueueItem(
+              id: row['id'],
+              promotionId: row['task_type'],
+              promotionTitle: _getPromotionTitle(row['task_type']),
+              tokensDeducted: _getPromotionTokenCost(row['task_type']),
+              queuedAt: DateTime.parse(row['created_at']),
+              status: _mapStatus(row['status']),
+              propertyId: null,
+            );
+          }).toList();
+        });
   }
 
   int _getPromotionTokenCost(String promotionId) {
@@ -386,16 +408,20 @@ class RecommendationService {
   String _mapStatus(String status) {
     // Map automation_tasks status to QueueItem status
     switch (status) {
+      case 'pending':
+        return 'pending';
       case 'queued':
-        return 'scheduled';
+        return 'approved';  // queued means approved by admin, ready for processing
       case 'running':
-        return 'processing';
+        return 'pending';  // processing tasks show as pending in simplified view
       case 'completed':
-        return 'completed';
+        return 'approved';  // completed tasks show as approved
       case 'failed':
-        return 'failed';
+        return 'pending';  // failed tasks show as pending in simplified view
+      case 'rejected':
+        return 'rejected';
       default:
-        return 'scheduled';
+        return 'pending';
     }
   }
 

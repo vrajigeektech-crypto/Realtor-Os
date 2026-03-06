@@ -54,47 +54,35 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
-      case 'scheduled':
-        return Colors.blue;
-      case 'processing':
-        return Colors.orange;
-      case 'completed':
+    switch (status.toLowerCase()) {
+      case 'approved':
         return Colors.green;
-      case 'failed':
+      case 'rejected':
         return Colors.red;
       default:
-        return Colors.grey;
+        return Colors.amber;
     }
   }
 
   String _getStatusText(String status) {
-    switch (status) {
-      case 'scheduled':
-        return 'Scheduled';
-      case 'processing':
-        return 'Processing';
-      case 'completed':
-        return 'Completed';
-      case 'failed':
-        return 'Failed';
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return 'approved';
+      case 'rejected':
+        return 'rejected';
       default:
-        return 'Unknown';
+        return 'pending';
     }
   }
 
   IconData _getStatusIcon(String status) {
-    switch (status) {
-      case 'scheduled':
-        return Icons.schedule;
-      case 'processing':
-        return Icons.autorenew;
-      case 'completed':
+    switch (status.toLowerCase()) {
+      case 'approved':
         return Icons.check_circle;
-      case 'failed':
-        return Icons.error;
+      case 'rejected':
+        return Icons.cancel;
       default:
-        return Icons.help;
+        return Icons.schedule;
     }
   }
 

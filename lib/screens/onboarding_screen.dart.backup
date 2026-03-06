@@ -254,22 +254,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             () => _pickFile('writing'),
                       ),
                       _buildMultiPhotoStep(),
-                    ],
+                    ].map((page) => SingleChildScrollView(
+                      child: page,
+                    )).toList(),
                   ),
                 ),
-                _buildNavigationButtons(),
-              ],
-            ),
-            // Show loading overlay only when uploading files
-            if (_isUploading || _isCompletingOnboarding)
-              Container(
-                color: Colors.black54,
-                child: const Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.buttonGold),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

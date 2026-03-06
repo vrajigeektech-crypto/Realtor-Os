@@ -16,6 +16,7 @@ class UserRecord {
   final String status; // Active | Running | Idle | Inactive
   final String lastLogin;
   final String totalOrders;
+  final String approvedQueueCount;
   final String tokenBalance;
   final bool isSelected;
   final bool hasActions;
@@ -27,6 +28,7 @@ class UserRecord {
     required this.status,
     required this.lastLogin,
     required this.totalOrders,
+    required this.approvedQueueCount,
     required this.tokenBalance,
     this.isSelected = false,
     this.hasActions = false,
@@ -259,6 +261,7 @@ class _AdminUserAgentContentState extends State<AdminUserAgentContent> {
                user.status,
         lastLogin: user.formattedLastLogin,
         totalOrders: user.totalOrders.toString(),
+        approvedQueueCount: user.approvedQueueCount.toString(),
         tokenBalance: user.tokenBalance.toString(),
         hasActions: true,
       )).toList(),
@@ -580,8 +583,8 @@ class _OutlineButton extends StatelessWidget {
 // ─────────────────────────────────────────────────────
 // DATA TABLE
 // ─────────────────────────────────────────────────────
-const _cols = ['Name', 'Email', 'Role', 'Status', 'Last Login', 'Total Orders', 'Token Balance', 'Flags'];
-const _cw   = [  155.0, 190.0,   88.0,    108.0,        96.0,          108.0,           118.0,   130.0 ];
+const _cols = ['Name', 'Email', 'Role', 'Status', 'Last Login', 'Total Orders (Approved)', 'Token Balance', 'Flags'];
+const _cw   = [  120.0, 150.0,   70.0,    80.0,        80.0,          120.0,            80.0,    80.0 ];
 
 class _DataTable extends StatelessWidget {
   final List<UserRecord> users;
@@ -651,16 +654,25 @@ class _HeaderRow extends StatelessWidget {
                 width: _cw[e.key],
                 child: Row(
                   children: [
-                    Text(e.value,
+                    Expanded(
+                      child: Text(
+                        e.value,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.4,
-                        )),
+                        ),
+                      ),
+                    ),
                     if (isSorted) ...[
                       const SizedBox(width: 3),
-                      const Icon(Icons.arrow_upward_rounded, size: 11, color: AppColors.buttonGold),
+                      const Icon(
+                        Icons.arrow_upward_rounded,
+                        size: 11,
+                        color: AppColors.buttonGold,
+                      ),
                     ],
                   ],
                 ),
@@ -801,16 +813,31 @@ class _DataRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Total Orders
+                    // Total Orders (Approved)
                     SizedBox(
                       width: _cw[5],
-                      child: Text(
-                        user.totalOrders,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            user.totalOrders,
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (user.approvedQueueCount != '0')
+                            Text(
+                              '(${user.approvedQueueCount} approved)',
+                              style: const TextStyle(
+                                color: AppColors.buttonGold,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     // Token Balance

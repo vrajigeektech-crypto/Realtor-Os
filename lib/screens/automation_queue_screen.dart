@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../layout/main_layout.dart';
@@ -17,11 +18,33 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
   List<QueueItem> _queueItems = [];
   bool _isLoading = true;
   String _selectedStatus = 'all';
+  StreamSubscription? _realtimeSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadQueueItems();
+    _setupRealtimeSubscription();
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupRealtimeSubscription() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    
+    // Listen for changes to this user's automation tasks
+    _realtimeSubscription = Supabase.instance.client
+        .from('automation_tasks')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .listen((_) {
+          _loadQueueItems(); // Refresh when any of this user's tasks change
+        });
   }
 
   Future<void> _loadQueueItems() async {
@@ -173,6 +196,10 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
 
   String _formatStatus(String status) {
     switch (status) {
+      case 'pending':
+        return 'Pending';
+      case 'approved':
+        return 'Approved';
       case 'scheduled':
         return 'Scheduled';
       case 'processing':
@@ -181,21 +208,31 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
         return 'Completed';
       case 'failed':
         return 'Failed';
+      case 'rejected':
+        return 'Rejected';
       default:
-        return 'Scheduled';
+        return 'Pending';
     }
   }
 
   Color _statusColor(String status) {
     switch (status) {
+      case 'pending':
+        return Colors.amber; // Amber for pending
+      case 'approved':
+        return Colors.green; // Green for approved
+      case 'scheduled':
+        return Colors.blue; // Blue for scheduled
       case 'processing':
         return Colors.orange;
       case 'completed':
         return Colors.green;
       case 'failed':
         return Colors.red;
+      case 'rejected':
+        return Colors.red.shade700; // Darker red for rejected
       default:
-        return Colors.blue;
+        return Colors.amber; // Default to amber for pending
     }
   }
 

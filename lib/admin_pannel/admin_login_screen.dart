@@ -1,5 +1,7 @@
 import 'package:demo/admin_pannel/admin_main_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_service.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -387,7 +389,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
     );
   }
 
-  void _handleLogin() {
+  void _handleLogin() async {
     if (_emailController.text.isEmpty) {
       _showSnack('Please enter your email');
       return;
@@ -400,9 +402,131 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       _showSnack('Please select a role');
       return;
     }
-    _showSnack('Logging in as $_selectedRole...');
-    Navigator.push(context, MaterialPageRoute(builder: (context) => AdminMainScreen(),));
 
+    // Only allow Super Admin to login
+    if (_selectedRole == 'Super Admin') {
+      await _authenticateSuperAdmin();
+    } else {
+      _showSnack('Access denied. Only Super Admin can log in.');
+    }
+  }
+
+  Future<void> _authenticateSuperAdmin() async {
+    const String superAdminEmail = 'superadmin@gmail.com';
+    const String superAdminPassword = '111111';
+
+    if (_emailController.text != superAdminEmail || _passwordController.text != superAdminPassword) {
+      _showSnack('Invalid Super Admin credentials');
+      return;
+    }
+
+    try {
+      _showSnack('Authenticating Super Admin...');
+      
+      // Initialize Supabase if not already initialized
+      User? user;
+      if (SupabaseService.instance.client.auth.currentUser == null) {
+        // Sign in with Supabase using the specific credentials
+        final response = await SupabaseService.instance.client.auth.signInWithPassword(
+          email: superAdminEmail,
+          password: superAdminPassword,
+        );
+
+        if (response.user == null) {
+          _showSnack('Super Admin authentication failed');
+          return;
+        }
+        user = response.user;
+      } else {
+        user = SupabaseService.instance.client.auth.currentUser;
+      }
+
+      // ✅ Flutter Check for Super Admin
+      if (user?.email == "superadmin@gmail.com" &&
+          user?.userMetadata?['is_super_admin'] == true) {
+        // Open Super Admin Panel
+        _showSnack('Super Admin authentication successful');
+        
+        // Update user metadata to ensure Super Admin role is set
+        await SupabaseService.instance.client.auth.updateUser(
+          UserAttributes(
+            data: {
+              'role': 'Super Admin',
+              'is_super_admin': true,
+            },
+          ),
+        );
+        
+        if (mounted) {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => AdminMainScreen()));
+        }
+      } else {
+        // Update metadata if not already set
+        await SupabaseService.instance.client.auth.updateUser(
+          UserAttributes(
+            data: {
+              'role': 'Super Admin',
+              'is_super_admin': true,
+            },
+          ),
+        );
+        
+        // Check again after updating metadata
+        final updatedUser = SupabaseService.instance.client.auth.currentUser;
+        if (updatedUser?.email == "superadmin@gmail.com" &&
+            updatedUser?.userMetadata?['is_super_admin'] == true) {
+          _showSnack('Super Admin authentication successful');
+          if (mounted) {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => AdminMainScreen()));
+          }
+        } else {
+          _showSnack('Super Admin access denied. Insufficient privileges.');
+        }
+      }
+    } catch (e) {
+      _showSnack('Super Admin authentication error: $e');
+    }
+  }
+
+  Future<void> _authenticateRegularAdmin() async {
+    try {
+      _showSnack('Authenticating as $_selectedRole...');
+      
+      // Sign in with Supabase using provided credentials
+      final response = await SupabaseService.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (response.user == null) {
+        _showSnack('Invalid credentials for $_selectedRole');
+        return;
+      }
+
+      // Check if user exists and is confirmed
+      final user = response.user!;
+      if (user.emailConfirmedAt == null) {
+        _showSnack('Please confirm your email first');
+        return;
+      }
+
+      // Update user metadata with the selected role
+      await SupabaseService.instance.client.auth.updateUser(
+        UserAttributes(
+          data: {
+            'role': _selectedRole,
+            'selected_role_at': DateTime.now().toIso8601String(),
+          },
+        ),
+      );
+      
+      _showSnack('Successfully logged in as $_selectedRole');
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => AdminMainScreen()));
+      }
+    } catch (e) {
+      _showSnack('Authentication failed: Invalid email or password');
+    }
   }
 
   void _showSnack(String message) {

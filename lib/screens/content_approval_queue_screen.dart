@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../layout/main_layout.dart';
 import '../utils/app_styles.dart';
+import '../services/recommendation_service.dart';
+import '../models/recommendation_models.dart';
 
 class ContentApprovalQueueScreen extends StatelessWidget {
   const ContentApprovalQueueScreen({super.key});
@@ -24,6 +27,8 @@ class _ContentApprovalLayout extends StatefulWidget {
 
 class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
   int _tabIndex = 0; // "Pending Review" sub-tab
+  final RecommendationService _recommendationService = RecommendationService();
+  final String _userId = Supabase.instance.client.auth.currentUser?.id ?? '';
 
   @override
   Widget build(BuildContext context) {
@@ -56,16 +61,24 @@ class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
                   letterSpacing: -0.5,
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.done_all, size: 18),
-                label: const Text('Approve All Pending'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppStyles.accentRose,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
+              StreamBuilder<List<QueueItem>>(
+                stream: _recommendationService.getAutomationQueueStream(_userId),
+                builder: (context, snapshot) {
+                  final pendingCount = snapshot.data?.where((item) => item.status == 'pending').length ?? 0;
+                  return ElevatedButton.icon(
+                    onPressed: pendingCount > 0 ? () {
+                      // Logic for bulk approval could go here
+                    } : null,
+                    icon: const Icon(Icons.done_all, size: 18),
+                    label: Text('Approve All Pending ($pendingCount)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppStyles.accentRose,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  );
+                }
               ),
             ],
           ),
@@ -131,20 +144,27 @@ class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
                         ),
                         if (e.key == 0) ...[
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFC05A5A).withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Text(
-                              '4',
-                              style: TextStyle(
-                                color: Color(0xFFC05A5A),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                          StreamBuilder<List<QueueItem>>(
+                            stream: _recommendationService.getAutomationQueueStream(_userId),
+                            builder: (context, snapshot) {
+                              final count = snapshot.data?.where((item) => item.status == 'pending').length ?? 0;
+                              if (count == 0) return const SizedBox.shrink();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFC05A5A).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: const TextStyle(
+                                    color: Color(0xFFC05A5A),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            }
                           ),
                         ],
                       ],
@@ -159,49 +179,80 @@ class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
   }
 
   Widget _buildMainContent() {
-    return ListView(
-      padding: const EdgeInsets.all(40),
-      children: [
-        _buildContentItem(
-          itemType: 'Social Media Post',
-          platform: 'Instagram',
-          title: 'Just Listed: 4500 Ocean Avenue',
-          agent: 'Marketing Bot v2',
-          snippet: 'Breathtaking ocean views await! 🌊 This stunning 4 bed, 3 bath home just hit the market. Don\'t miss out on luxury coastal living...',
-          imageUrl: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=400',
-          timeAgo: '2 hours ago',
-        ),
-        const SizedBox(height: 24),
-        _buildContentItem(
-          itemType: 'Email Newsletter',
-          platform: 'Mailchimp',
-          title: 'May Market Update for Investors',
-          agent: 'Content Writer Pro',
-          snippet: 'Subject: Q2 Real Estate Trends You Need to Know\n\nHi [Name],\nAs we enter the second quarter, the commercial real estate market is showing signs of...',
-          timeAgo: '5 hours ago',
-        ),
-        const SizedBox(height: 24),
-        _buildContentItem(
-          itemType: 'Property Description',
-          platform: 'MLS',
-          title: '1120 Maple Street Description update',
-          agent: 'Listing Optimizer',
-          snippet: 'Nestled in the heart of the historic district, this meticulously restored craftsman combines timeless charm with modern amenities. Hardwood floors...',
-          timeAgo: 'Yesterday',
-        ),
-      ],
+    return StreamBuilder<List<QueueItem>>(
+      stream: _recommendationService.getAutomationQueueStream(_userId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: AppStyles.accentRose));
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.white)));
+        }
+
+        final allItems = snapshot.data ?? [];
+        final filteredItems = _filterItems(allItems);
+
+        if (filteredItems.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inbox_outlined, size: 64, color: AppStyles.mutedText.withValues(alpha: 0.5)),
+                const SizedBox(height: 16),
+                Text(
+                  'No items in ${_getTabName()}',
+                  style: const TextStyle(color: AppStyles.mutedText, fontSize: 18),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(40),
+          itemCount: filteredItems.length,
+          itemBuilder: (context, index) {
+            final item = filteredItems[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: _buildContentItem(item),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildContentItem({
-    required String itemType,
-    required String platform,
-    required String title,
-    required String agent,
-    required String snippet,
-    String? imageUrl,
-    required String timeAgo,
-  }) {
+  List<QueueItem> _filterItems(List<QueueItem> items) {
+    switch (_tabIndex) {
+      case 0: // Pending Review
+        return items.where((item) => item.status == 'pending').toList();
+      case 1: // Approved
+        return items.where((item) => 
+          item.status == 'scheduled' || 
+          item.status == 'processing' || 
+          item.status == 'completed'
+        ).toList();
+      case 3: // Archived
+        return items.where((item) => item.status == 'rejected' || item.status == 'failed').toList();
+      default:
+        return [];
+    }
+  }
+
+  String _getTabName() {
+    return ['Pending Review', 'Approved', 'Needs Edit', 'Archived'][_tabIndex];
+  }
+
+  Widget _buildContentItem(QueueItem item) {
+    // Map QueueItem to UI fields
+    final itemType = _getItemType(item.promotionId);
+    final platform = _getPlatform(item.promotionId);
+    final agent = 'AI Agent ${item.promotionId.split('_').first}';
+    final timeAgo = _formatTimeAgo(item.queuedAt);
+    final statusColor = _getStatusColor(item.status);
+
     return Container(
       decoration: AppStyles.premiumCardDecoration(
         color: Colors.black.withValues(alpha: 0.2),
@@ -213,18 +264,23 @@ class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (imageUrl != null) ...[
-                  ClipRRect(
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      imageUrl,
-                      width: 120,
-                      height: 120,
-                      fit: BoxFit.cover,
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      _getIcon(item.promotionId),
+                      color: AppStyles.accentRose,
+                      size: 32,
                     ),
                   ),
-                  const SizedBox(width: 24),
-                ],
+                ),
+                const SizedBox(width: 24),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,7 +321,7 @@ class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        title,
+                        item.promotionTitle,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -273,22 +329,30 @@ class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'Generated by: $agent',
-                        style: const TextStyle(color: AppStyles.copperBrush, fontSize: 13),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-                        ),
-                        child: Text(
-                          snippet,
-                          style: const TextStyle(color: AppStyles.mutedText, fontSize: 14, height: 1.5),
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'Generated by: $agent',
+                            style: const TextStyle(color: AppStyles.copperBrush, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              item.status.toUpperCase(),
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -297,48 +361,72 @@ class _ContentApprovalLayoutState extends State<_ContentApprovalLayout> {
             ),
           ),
           const Divider(height: 1, color: Colors.white10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('Edit Content'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
+          if (item.status == 'pending')
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Review Workflow'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.close, size: 16),
-                  label: const Text('Reject'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFC05A5A),
-                    side: const BorderSide(color: Color(0xFFC05A5A)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  const SizedBox(width: 16),
+                  const Text(
+                    'Waiting for Admin Approval',
+                    style: TextStyle(color: AppStyles.mutedText, fontSize: 13, fontStyle: FontStyle.italic),
                   ),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.check, size: 16),
-                  label: const Text('Approve & Publish'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppStyles.statusGreen.withValues(alpha: 0.2),
-                    foregroundColor: AppStyles.statusGreen,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    side: BorderSide(color: AppStyles.statusGreen.withValues(alpha: 0.5)),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
+  }
+
+  String _getItemType(String promotionId) {
+    if (promotionId.contains('linkedin')) return 'Social Media Post';
+    if (promotionId.contains('tiktok')) return 'Video Reel';
+    if (promotionId.contains('email')) return 'Email Newsletter';
+    return 'Marketing Asset';
+  }
+
+  String _getPlatform(String promotionId) {
+    if (promotionId.contains('linkedin')) return 'LinkedIn';
+    if (promotionId.contains('tiktok')) return 'TikTok';
+    if (promotionId.contains('instagram')) return 'Instagram';
+    if (promotionId.contains('email')) return 'Email';
+    return 'Social Media';
+  }
+
+  IconData _getIcon(String promotionId) {
+    if (promotionId.contains('linkedin')) return Icons.business;
+    if (promotionId.contains('tiktok')) return Icons.play_circle_fill;
+    if (promotionId.contains('email')) return Icons.email;
+    return Icons.auto_awesome;
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending': return Colors.orange;
+      case 'scheduled': return Colors.blue;
+      case 'processing': return Colors.purple;
+      case 'completed': return Colors.green;
+      case 'failed': return Colors.red;
+      case 'rejected': return Colors.redAccent;
+      default: return Colors.grey;
+    }
+  }
+
+  String _formatTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    return '${difference.inDays}d ago';
   }
 }

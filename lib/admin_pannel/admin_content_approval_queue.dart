@@ -1,35 +1,9 @@
+import 'dart:async';
 import 'package:demo/admin_pannel/shared_admin_navigation.dart';
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
-
-// ─── Color Palette ────────────────────────────────────────────────────────────
-class AppColors {
-  static const background = Color(0xFF1A1714);
-  static const sidebarBg = Color(0xFF141210);
-  static const surfaceDark = Color(0xFF1E1A17);
-  static const surfaceMid = Color(0xFF252019);
-  static const cardBg = Color(0xFF201C19);
-  static const copper = Color(0xFFB87333);
-  static const copperLight = Color(0xFFCE8F50);
-  static const copperDim = Color(0xFF7A4E2A);
-  static const textPrimary = Color(0xFFD4C5B0);
-  static const textSecondary = Color(0xFF8A7D6E);
-  static const textMuted = Color(0xFF5A5048);
-  static const divider = Color(0xFF2A2420);
-  static const tabActive = Color(0xFF2E2720);
-  static const tabBorder = Color(0xFF3A3028);
-  static const pendingBg = Color(0xFF2A2318);
-  static const pendingText = Color(0xFFB89060);
-  static const pendingBorder = Color(0xFF4A3820);
-  static const approveBg = Color(0xFF1A2418);
-  static const approveText = Color(0xFF70A870);
-  static const rejectBg = Color(0xFF2A1818);
-  static const rejectText = Color(0xFFB87070);
-  static const flagBg = Color(0xFF1E1E28);
-  static const flagText = Color(0xFF8888C8);
-  static const rowHover = Color(0xFF242018);
-  static const glowCopper = Color(0x30B87333);
-}
+import '../services/admin_approval_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ─── Data Model ───────────────────────────────────────────────────────────────
 enum ContentStatus { pending, approved, rejected, flagged }
@@ -43,6 +17,10 @@ class ContentItem {
   final ContentStatus status;
   final ContentTab type;
   final IconData previewIcon;
+  final String userId;
+  final String userEmail;
+  final String userName;
+  final String taskType;
 
   const ContentItem({
     required this.id,
@@ -52,6 +30,10 @@ class ContentItem {
     required this.status,
     required this.type,
     required this.previewIcon,
+    required this.userId,
+    required this.userEmail,
+    required this.userName,
+    required this.taskType,
   });
 }
 
@@ -69,45 +51,12 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
   ContentTab _selectedTab = ContentTab.image;
   late AnimationController _glowController;
   late Animation<double> _glowAnim;
-
-  final List<ContentItem> _items = [
-    ContentItem(
-      id: '1',
-      title: 'Dark Forest Landscape',
-      subtitle: 'photography · 4.2 MB · RAW format',
-      timeAgo: '2 minutes ago',
-      status: ContentStatus.pending,
-      type: ContentTab.image,
-      previewIcon: Icons.image_outlined,
-    ),
-    ContentItem(
-      id: '2',
-      title: 'Cinematic Title Sequence',
-      subtitle: 'mp4 · 1080p · 00:45 duration',
-      timeAgo: '2 minutes ago',
-      status: ContentStatus.pending,
-      type: ContentTab.image,
-      previewIcon: Icons.play_circle_outline,
-    ),
-    ContentItem(
-      id: '3',
-      title: 'Abstract Motion Study',
-      subtitle: 'illustration · vector · layered',
-      timeAgo: '2 minutes ago',
-      status: ContentStatus.pending,
-      type: ContentTab.image,
-      previewIcon: Icons.blur_on_outlined,
-    ),
-    ContentItem(
-      id: '4',
-      title: 'Editorial Layout Draft',
-      subtitle: 'document · 12 pages · InDesign',
-      timeAgo: '1 minute ago',
-      status: ContentStatus.pending,
-      type: ContentTab.image,
-      previewIcon: Icons.article_outlined,
-    ),
-  ];
+  
+  final AdminApprovalService _adminService = AdminApprovalService();
+  List<ContentItem> _items = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  int _pendingCount = 0;
 
   @override
   void initState() {
@@ -119,11 +68,185 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
     _glowAnim = Tween<double>(begin: 0.3, end: 1.0).animate(
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
+    _loadPendingTasks();
+    _setupRealtimeSubscription();
+  }
+
+  StreamSubscription? _realtimeSubscription;
+
+  void _setupRealtimeSubscription() {
+    // Listen for all changes to automation_tasks table
+    // We need to listen for all status changes (pending -> queued/rejected)
+    _realtimeSubscription = Supabase.instance.client
+        .from('automation_tasks')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          _loadPendingTasks(); // Refresh the pending tasks list
+        });
+  }
+
+  Future<void> _loadPendingTasks() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final pendingTasks = await _adminService.getPendingTasks();
+      
+      final contentItems = pendingTasks.map((task) {
+        // Map task data to ContentItem
+        final taskType = task['task_type'] as String? ?? 'unknown';
+        final title = task['user_name'] ?? task['user_email'] ?? 'Anonymous';
+        final subtitle = _getTaskTitle(taskType);
+        final timeAgo = _formatTimeAgo(task['created_at']);
+        final icon = _getTaskIcon(taskType);
+        
+        return ContentItem(
+          id: task['task_id'],
+          title: title,
+          subtitle: subtitle,
+          timeAgo: timeAgo,
+          status: ContentStatus.pending,
+          type: _getContentType(taskType),
+          previewIcon: icon,
+          userId: task['user_id'],
+          userEmail: task['user_email'] ?? '',
+          userName: task['user_name'] ?? 'User',
+          taskType: taskType,
+        );
+      }).toList();
+
+      setState(() {
+        _items = contentItems; // Populate with actual data
+        _pendingCount = contentItems.length;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading pending tasks: $e');
+      setState(() {
+        _errorMessage = 'Failed to load pending tasks: $e';
+        _isLoading = false;
+        _pendingCount = 0;
+      });
+    }
+  }
+
+  String _getTaskTitle(String taskType) {
+    final titles = {
+      'linkedin_post': 'LinkedIn Post',
+      'tiktok_video': 'TikTok Video',
+      'featured_listing': 'Featured Listing',
+      'instagram_story': 'Instagram Story',
+      'facebook_boost': 'Facebook Ad',
+      'youtube_tour': 'YouTube Tour',
+      'email_blast': 'Email Campaign',
+      'google_ads': 'Google Ads',
+      '1': 'TikTok Listing Walkthrough',
+      '2': 'Instagram Market Insight',
+      '3': 'YouTube Shorts - Buyer Tip',
+      '4': 'AI Calling Campaign',
+      '5': 'AI Calling Campaign',
+    };
+    return titles[taskType] ?? '$taskType Promotion';
+  }
+
+  IconData _getTaskIcon(String taskType) {
+    if (taskType.contains('video') || taskType.contains('tiktok') || taskType.contains('youtube')) {
+      return Icons.play_circle_outline;
+    } else if (taskType.contains('image') || taskType.contains('instagram')) {
+      return Icons.image_outlined;
+    } else if (taskType.contains('email')) {
+      return Icons.email_outlined;
+    } else if (taskType.contains('linkedin') || taskType.contains('facebook')) {
+      return Icons.article_outlined;
+    } else {
+      return Icons.blur_on_outlined;
+    }
+  }
+
+  ContentTab _getContentType(String taskType) {
+    if (taskType.contains('video') || taskType.contains('tiktok') || taskType.contains('youtube')) {
+      return ContentTab.video;
+    } else if (taskType.contains('image') || taskType.contains('instagram')) {
+      return ContentTab.image;
+    } else if (taskType.contains('audio')) {
+      return ContentTab.audio;
+    } else {
+      return ContentTab.writing;
+    }
+  }
+
+  String _formatTimeAgo(String createdAt) {
+    try {
+      final dateTime = DateTime.parse(createdAt);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+      
+      if (difference.inMinutes < 60) {
+        return '${difference.inMinutes} minutes ago';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours} hours ago';
+      } else {
+        return '${difference.inDays} days ago';
+      }
+    } catch (e) {
+      return 'Unknown time';
+    }
+  }
+
+  Future<void> _approveTask(String taskId) async {
+    try {
+      final success = await _adminService.approveTask(taskId);
+      if (success) {
+        _showSuccessSnackBar('Task approved successfully');
+        _loadPendingTasks(); // Refresh the list
+      } else {
+        _showErrorSnackBar('Failed to approve task');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error approving task: $e');
+    }
+  }
+
+  Future<void> _rejectTask(String taskId) async {
+    try {
+      final success = await _adminService.rejectTask(taskId);
+      if (success) {
+        _showSuccessSnackBar('Task rejected successfully');
+        _loadPendingTasks(); // Refresh the list
+      } else {
+        _showErrorSnackBar('Failed to reject task');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error rejecting task: $e');
+    }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _glowController.dispose();
+    _realtimeSubscription?.cancel();
     super.dispose();
   }
 
@@ -131,16 +254,7 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Row(
-        children: [
-          SharedAdminNavigation(
-            selectedIndex: _selectedNav,
-            onSelect: (index) => setState(() => _selectedNav = index),
-            workspaceName: 'NEXUS',
-          ),
-          Expanded(child: _buildMainContent()),
-        ],
-      ),
+      body: _buildMainContent(),
     );
   }
 
@@ -183,6 +297,68 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
                     fontWeight: FontWeight.w300,
                     letterSpacing: 0.5,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (_errorMessage != null)
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            color: AppColors.rejectText,
+                            fontSize: 14,
+                          ),
+                        ),
+                      )
+                    else
+                      Text(
+                        _pendingCount == 0 && !_isLoading 
+                            ? 'No pending tasks' 
+                            : '$_pendingCount pending task${_pendingCount == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    if (_errorMessage != null)
+                      IconButton(
+                        onPressed: _loadPendingTasks,
+                        icon: const Icon(
+                          Icons.refresh,
+                          color: AppColors.copper,
+                          size: 20,
+                        ),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.copper.withOpacity(0.1),
+                          padding: const EdgeInsets.all(8),
+                        ),
+                      )
+                    else ...[
+                      const Spacer(),
+                      IconButton(
+                        onPressed: _loadPendingTasks,
+                        icon: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.copper,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.refresh,
+                                color: AppColors.copper,
+                                size: 20,
+                              ),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.copper.withOpacity(0.1),
+                          padding: const EdgeInsets.all(8),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 24),
                 // Tab bar
@@ -259,6 +435,15 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
 
   // ─── Table ────────────────────────────────────────────────────────────────
   Widget _buildTable() {
+    // Filter items based on selected tab
+    final filteredItems = _selectedTab == ContentTab.image 
+        ? _items.where((item) => item.type == ContentTab.image).toList()
+        : _selectedTab == ContentTab.video
+            ? _items.where((item) => item.type == ContentTab.video).toList()
+            : _selectedTab == ContentTab.audio
+                ? _items.where((item) => item.type == ContentTab.audio).toList()
+                : _items.where((item) => item.type == ContentTab.writing).toList();
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardBg,
@@ -269,15 +454,106 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
         children: [
           _buildTableHeader(),
           Expanded(
-            child: ListView.separated(
-              itemCount: _items.length,
-              separatorBuilder: (_, __) => Container(
-                height: 1,
-                color: AppColors.divider,
-              ),
-              itemBuilder: (context, index) =>
-                  _buildTableRow(_items[index], index),
-            ),
+            child: _isLoading 
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: AppColors.copper),
+                        SizedBox(height: 16),
+                        Text(
+                          'Loading pending tasks...',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  )
+                : _errorMessage != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 48,
+                              color: AppColors.rejectText,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Failed to load tasks',
+                              style: TextStyle(color: AppColors.rejectText, fontSize: 18),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _errorMessage!,
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _loadPendingTasks,
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.copper,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : filteredItems.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.copper.withOpacity(0.05),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: AppColors.copper.withOpacity(0.1)),
+                                  ),
+                                  child: Icon(
+                                    Icons.inbox_outlined,
+                                    size: 32,
+                                    color: AppColors.copper.withOpacity(0.4),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                const Text(
+                                  'Queue is Clear',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'All pending tasks for this category have been reviewed.\nAny new requests will appear here in real-time.',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 14,
+                                    height: 1.5,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredItems.length,
+                            separatorBuilder: (_, __) => Container(
+                              height: 1,
+                              color: AppColors.divider,
+                            ),
+                            itemBuilder: (context, index) =>
+                                _buildTableRow(filteredItems[index], index),
+                          ),
           ),
         ],
       ),
@@ -306,8 +582,8 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
             ),
           ),
           const SizedBox(width: 12),
-          _headerCell('CONTENT FILE', flex: 5),
-          _headerCell('FILTERS', flex: 3),
+          _headerCell('NAME & DETAIL', flex: 5),
+          _headerCell('ELAPSED', flex: 3),
           _headerCell('STATUS', flex: 2),
           _headerCell('ACTION CENTER', flex: 4),
         ],
@@ -359,21 +635,21 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          height: 8,
-                          width: 120,
-                          decoration: BoxDecoration(
-                            color: AppColors.textMuted.withOpacity(0.4),
-                            borderRadius: BorderRadius.circular(2),
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.1,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Container(
-                          height: 6,
-                          width: 90,
-                          decoration: BoxDecoration(
-                            color: AppColors.textMuted.withOpacity(0.25),
-                            borderRadius: BorderRadius.circular(2),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.subtitle,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -480,8 +756,9 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
   }
 
   Widget _buildActionButtons(String itemId) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
       children: [
         _ActionButton(
           icon: Icons.check,
@@ -489,25 +766,31 @@ class _AdminContentApprovalQueueScreenState extends State<AdminContentApprovalQu
           bgColor: AppColors.approveBg,
           textColor: AppColors.approveText,
           borderColor: AppColors.approveText.withOpacity(0.3),
-          onTap: () {},
+          onTap: () => _approveTask(itemId),
         ),
-        const SizedBox(width: 6),
         _ActionButton(
           icon: Icons.close,
           label: 'Reject',
           bgColor: AppColors.rejectBg,
           textColor: AppColors.rejectText,
           borderColor: AppColors.rejectText.withOpacity(0.3),
-          onTap: () {},
+          onTap: () => _rejectTask(itemId),
         ),
-        const SizedBox(width: 6),
         _ActionButton(
           icon: Icons.flag_outlined,
           label: 'Flag',
           bgColor: AppColors.flagBg,
           textColor: AppColors.flagText,
           borderColor: AppColors.flagText.withOpacity(0.3),
-          onTap: () {},
+          onTap: () {
+            // TODO: Implement flag functionality
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Flag functionality coming soon'),
+                backgroundColor: AppColors.flagText,
+              ),
+            );
+          },
         ),
       ],
     );
@@ -589,7 +872,7 @@ class _ActionButtonState extends State<_ActionButton> {
             color: _pressed
                 ? widget.bgColor.withOpacity(0.8)
                 : _hovered
-                ? widget.bgColor.withOpacity(1.4)
+                ? widget.bgColor.withOpacity(0.9)
                 : widget.bgColor,
             borderRadius: BorderRadius.circular(4),
             border: Border.all(

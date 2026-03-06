@@ -1,9 +1,6 @@
--- ============================================================================
--- get_users_list (Enhanced Version)
--- Returns all users with comprehensive data for user management table
--- Input: None (uses auth.uid() for permissions - admins see all, brokers see their agents)
--- Output: jsonb array of users with comprehensive fields
--- ============================================================================
+-- Fixed version of get_users_list function
+-- This version removes the dependency on the non-existent 'tasks' table
+
 DROP FUNCTION IF EXISTS public.get_users_list() CASCADE;
 
 CREATE OR REPLACE FUNCTION public.get_users_list()
@@ -16,7 +13,7 @@ DECLARE
   v_user_role text;
   v_users jsonb;
 BEGIN
-  -- Get the current authenticated user ID
+  -- Get current authenticated user ID
   v_user_id := auth.uid();
   
   IF v_user_id IS NULL THEN
@@ -75,9 +72,9 @@ BEGIN
           'longest_streak', u.longest_streak,
           'total_orders', COALESCE((
             SELECT COUNT(*)::int
-            FROM public.tasks t
-            WHERE t.user_id = u.id
-          ), 0),
+            FROM public.automation_tasks at
+            WHERE at.user_id = u.id
+          ), 0), -- Calculate total orders from automation_tasks table
           'approved_queue_count', COALESCE((
             SELECT COUNT(*)::int
             FROM public.automation_tasks at
@@ -133,9 +130,9 @@ BEGIN
           'longest_streak', u.longest_streak,
           'total_orders', COALESCE((
             SELECT COUNT(*)::int
-            FROM public.tasks t
-            WHERE t.user_id = u.id
-          ), 0),
+            FROM public.automation_tasks at
+            WHERE at.user_id = u.id
+          ), 0), -- Calculate total orders from automation_tasks table
           'approved_queue_count', COALESCE((
             SELECT COUNT(*)::int
             FROM public.automation_tasks at
@@ -192,9 +189,9 @@ BEGIN
           'longest_streak', u.longest_streak,
           'total_orders', COALESCE((
             SELECT COUNT(*)::int
-            FROM public.tasks t
-            WHERE t.user_id = u.id
-          ), 0),
+            FROM public.automation_tasks at
+            WHERE at.user_id = u.id
+          ), 0), -- Calculate total orders from automation_tasks table
           'approved_queue_count', COALESCE((
             SELECT COUNT(*)::int
             FROM public.automation_tasks at

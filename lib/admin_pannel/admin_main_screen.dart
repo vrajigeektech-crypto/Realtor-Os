@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import 'shared_admin_navigation.dart';
 import 'admin_user_agent_content.dart';
-import 'admin_content_approval_content.dart';
+import 'admin_content_approval_queue.dart';
 
 class AdminMainScreen extends StatefulWidget {
   const AdminMainScreen({super.key});
@@ -42,11 +42,11 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
       case 0: // Dashboard
         return _buildDashboardScreen();
       case 1: // User Management
-        return const AdminUserAgentContent();
+          return const AdminUserAgentContent();
       case 2: // Orders
         return _buildOrdersScreen();
       case 3: // Content Approval
-        return const AdminContentApprovalContent();
+        return const AdminContentApprovalQueueScreen();
       case 4: // Tasks
         return _buildTasksScreen();
       case 5: // Activity Log
@@ -115,7 +115,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
 
   Widget _buildDashboardCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(12),
@@ -123,43 +123,44 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 24),
+              Icon(icon, color: color, size: 20),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '+12%',
                   style: TextStyle(
                     color: color,
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Text(
             value,
             style: const TextStyle(
               color: AppColors.textPrimary,
-              fontSize: 32,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             title,
             style: const TextStyle(
               color: AppColors.textSecondary,
-              fontSize: 14,
+              fontSize: 12,
             ),
           ),
         ],

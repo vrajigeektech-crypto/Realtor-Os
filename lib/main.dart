@@ -207,27 +207,10 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
           // ? AdminLoginScreen()
           ? LoginScreen(onLoginSuccess: () => _checkStatus())
           : !_onboardingCompleted
-          ? Column(
-              children: [
-                const OnboardingScreen(),
-                // New Flow Option
-                Container(
-                  margin: const EdgeInsets.all(8),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pushNamed('/new_flow/welcome');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.buttonGold,
-                      foregroundColor: Colors.black,
-                    ),
-                    child: const Text('Try New Onboarding Flow'),
-                  ),
-                ),
-              ],
-            )
-      : AdminMainScreen(),
-      // : MainLayoutWrapper(activeIndex: 0),
+          ? Expanded(child: OnboardingScreen())
+      // : AdminLoginScreen(),
+      // : AdminMainScreen(),
+      : MainLayoutWrapper(activeIndex: 0),
     routes: {
         // New flow routes
         '/new_flow/welcome': (context) => const NewFlowWelcomeScreen(),

@@ -38,6 +38,7 @@ class EnhancedUserListItem {
   final int currentStreak;
   final int longestStreak;
   final int totalOrders;
+  final int approvedQueueCount;
   final bool hasFlags;
 
   EnhancedUserListItem({
@@ -76,6 +77,7 @@ class EnhancedUserListItem {
     required this.currentStreak,
     required this.longestStreak,
     required this.totalOrders,
+    required this.approvedQueueCount,
     required this.hasFlags,
   });
 
@@ -135,6 +137,7 @@ class EnhancedUserListItem {
       currentStreak: json['current_streak'] as int? ?? 0,
       longestStreak: json['longest_streak'] as int? ?? 0,
       totalOrders: json['total_orders'] as int? ?? 0,
+      approvedQueueCount: json['approved_queue_count'] as int? ?? 0,
       hasFlags: json['has_flags'] as bool? ?? false,
     );
   }
