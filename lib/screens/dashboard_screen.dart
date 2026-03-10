@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
 import '../widgets/content_card.dart';
 import '../screens/review_recommendation_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/photo_upload_service.dart';
+import '../services/recommendation_draft_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -10,6 +13,68 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final RecommendationDraftService _draftService = RecommendationDraftService();
+  final PhotoUploadService _photoUpload = PhotoUploadService.instance;
+
+  Map<String, List<String>> _draftImagesByRecommendationId = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDrafts();
+  }
+
+  Future<void> _loadDrafts() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+      final drafts = await _draftService.getDraftImagesForUser(userId);
+      setState(() {
+        _draftImagesByRecommendationId = drafts;
+      });
+    } catch (e) {
+      debugPrint('[Dashboard] Failed loading drafts: $e');
+    } finally {
+      // no-op
+    }
+  }
+
+  Future<void> _uploadForRecommendation(String recommendationId) async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not authenticated');
+
+      final uploaded = await _photoUpload.pickAndUploadPhotos(multiple: false);
+      if (uploaded.isEmpty) return;
+
+      await _draftService.upsertDraftImages(
+        userId: userId,
+        recommendationId: recommendationId,
+        imageUrls: uploaded,
+      );
+
+      setState(() {
+        _draftImagesByRecommendationId = {
+          ..._draftImagesByRecommendationId,
+          recommendationId: uploaded,
+        };
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  String? _draftPrimaryImage(String recommendationId) {
+    final urls = _draftImagesByRecommendationId[recommendationId];
+    return (urls != null && urls.isNotEmpty) ? urls.first : null;
+  }
+
   void _navigateToReview(BuildContext context, Map<String, dynamic> recommendation) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -184,10 +249,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // 1. TikTok Card
                     ContentCard(
                       platform: "TikTok",
-                      imageUrl: "assets/images/img_tiktok_woman.jpg",
+                      imageUrl: _draftPrimaryImage('1') ?? '',
+                      isNetworkImage: _draftPrimaryImage('1') != null,
                       title: "TikTok Listing Walkthrough",
                       status: "Ready",
                       tokens: 5,
+                      onUploadImage: () => _uploadForRecommendation('1'),
                       onApprove: () => _navigateToReview(context, {
                         'id': '1',
                         'title': 'TikTok Listing Walkthrough',
@@ -196,16 +263,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         'token_cost': 5,
                         'status': 'Ready',
                         'description': 'Create engaging TikTok walkthrough of your latest listing',
+                        'image_urls': _draftImagesByRecommendationId['1'] ?? const <String>[],
                       }),
                     ),  
 
                     // 2. Instagram Card
                     ContentCard(
                       platform: "Instagram",
-                      imageUrl: "assets/images/img_graph_bg.jpg",
+                      imageUrl: _draftPrimaryImage('2') ?? '',
+                      isNetworkImage: _draftPrimaryImage('2') != null,
                       title: "Instagram Market Insight",
                       status: "Ready",
                       tokens: 3,
+                      onUploadImage: () => _uploadForRecommendation('2'),
                       onApprove: () => _navigateToReview(context, {
                         'id': '2',
                         'title': 'Instagram Market Insight',
@@ -214,16 +284,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         'token_cost': 3,
                         'status': 'Ready',
                         'description': 'Share latest market trends with your Instagram followers',
+                        'image_urls': _draftImagesByRecommendationId['2'] ?? const <String>[],
                       }),
                     ),
 
                     // 3. YouTube Shorts Card
                     ContentCard(
                       platform: "YouTube Shorts",
-                      imageUrl: "assets/images/img_youtube_woman.jpg",
+                      imageUrl: _draftPrimaryImage('3') ?? '',
+                      isNetworkImage: _draftPrimaryImage('3') != null,
                       title: "Buyer Tip Walkthrough",
                       status: "Ready",
                       tokens: 4,
+                      onUploadImage: () => _uploadForRecommendation('3'),
                       onApprove: () => _navigateToReview(context, {
                         'id': '3',
                         'title': 'Buyer Tip Walkthrough',
@@ -232,16 +305,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         'token_cost': 4,
                         'status': 'Ready',
                         'description': 'Help first-time buyers with essential tips',
+                        'image_urls': _draftImagesByRecommendationId['3'] ?? const <String>[],
                       }),
                     ),
 
                     // 4. LinkedIn Card
                     ContentCard(
                       platform: "LinkedIn",
-                      imageUrl: "assets/images/img_audio_wave.jpg",
+                      imageUrl: _draftPrimaryImage('4') ?? '',
+                      isNetworkImage: _draftPrimaryImage('4') != null,
                       title: "AI Calling Campaign",
                       status: "In Progress",
                       tokens: 2,
+                      onUploadImage: () => _uploadForRecommendation('4'),
                       onApprove: () => _navigateToReview(context, {
                         'id': '4',
                         'title': 'AI Calling Campaign',
@@ -250,16 +326,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         'token_cost': 2,
                         'status': 'In Progress',
                         'description': 'AI-powered calling campaign for qualified leads',
+                        'image_urls': _draftImagesByRecommendationId['4'] ?? const <String>[],
                       }),
                     ),
 
                     // 5. AI Calling Card
                     ContentCard(
                       platform: "AI Calling",
-                      imageUrl: "assets/images/img_office_bg.jpg",
+                      imageUrl: _draftPrimaryImage('5') ?? '',
+                      isNetworkImage: _draftPrimaryImage('5') != null,
                       title: "AI Calling Campaign",
                       status: "Ready",
                       tokens: 8,
+                      onUploadImage: () => _uploadForRecommendation('5'),
                       onApprove: () => _navigateToReview(context, {
                         'id': '5',
                         'title': 'AI Calling Campaign',
@@ -268,6 +347,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         'token_cost': 8,
                         'status': 'Ready',
                         'description': 'AI-powered calling campaign for qualified leads',
+                        'image_urls': _draftImagesByRecommendationId['5'] ?? const <String>[],
                       }),
                     ),
                   ],

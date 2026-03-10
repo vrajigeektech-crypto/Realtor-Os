@@ -59,6 +59,7 @@ class QueueItem {
   final String status; // 'scheduled', 'processing', 'completed', 'failed'
   final String? propertyId;
   final Map<String, dynamic>? metadata;
+  final String? rejectionReason;
 
   QueueItem({
     required this.id,
@@ -69,6 +70,7 @@ class QueueItem {
     this.status = 'scheduled',
     this.propertyId,
     this.metadata,
+    this.rejectionReason,
   });
 
   factory QueueItem.fromJson(Map<String, dynamic> json) {
@@ -81,6 +83,7 @@ class QueueItem {
       status: json['status'] ?? 'scheduled',
       propertyId: json['property_id'],
       metadata: json['metadata'],
+      rejectionReason: json['rejection_reason'],
     );
   }
 
@@ -94,6 +97,7 @@ class QueueItem {
       'status': status,
       'property_id': propertyId,
       'metadata': metadata,
+      'rejection_reason': rejectionReason,
     };
   }
 }

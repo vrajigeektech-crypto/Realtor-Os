@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../core/app_colors.dart';
 import '../layout/main_layout.dart';
 import '../services/recommendation_service.dart';
-import '../models/recommendation_models.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/balance_service.dart';
+import '../services/recommendation_draft_service.dart';
 
 class ReviewRecommendationScreen extends StatefulWidget {
   final Map<String, dynamic> recommendation;
@@ -22,6 +20,7 @@ class ReviewRecommendationScreen extends StatefulWidget {
 class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen> {
   final RecommendationService _recommendationService = RecommendationService();
   final BalanceService _balanceService = BalanceService();
+  final RecommendationDraftService _draftService = RecommendationDraftService();
 
   bool _isLaunching = false;
   double _currentBalance = 0.0;
@@ -51,6 +50,10 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
       if (userId == null) throw Exception('User not authenticated');
 
       final tokenCost = widget.recommendation['token_cost'] ?? 5;
+      final recommendationId = widget.recommendation['id']?.toString() ?? '';
+      final imageUrls = (widget.recommendation['image_urls'] is List)
+          ? List<String>.from(widget.recommendation['image_urls'] as List)
+          : <String>[];
 
       if (_currentBalance < tokenCost) {
         _showInsufficientBalanceDialog(tokenCost);
@@ -62,9 +65,19 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
         promotionId: widget.recommendation['id'].toString(),
         promotionTitle: widget.recommendation['title'] ?? 'AI Workflow',
         tokenCost: tokenCost,
+        imageUrls: imageUrls,
       );
 
       if (queueItem == null) throw Exception('Failed to launch workflow');
+
+      if (recommendationId.isNotEmpty) {
+        try {
+          await _draftService.deleteDraft(
+            userId: userId,
+            recommendationId: recommendationId,
+          );
+        } catch (_) {}
+      }
 
       _showSuccessDialog();
       await _loadBalance();
@@ -252,6 +265,11 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
   // ─── LEFT COLUMN: Phone Mockup ───────────────────────────────────────────────
 
   Widget _buildPhoneMockup() {
+    final uploadedUrls = (widget.recommendation['image_urls'] is List)
+        ? List<String>.from(widget.recommendation['image_urls'] as List)
+        : <String>[];
+    final primary = uploadedUrls.isNotEmpty ? uploadedUrls.first : null;
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
@@ -296,7 +314,7 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
                   ),
                 ),
 
-                // Main image of the woman (placeholder for actual image)
+                // Main image (uploaded draft image if present)
                 Positioned(
                   top: 90,
                   left: 0,
@@ -308,7 +326,7 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
                     ),
                     child: Stack(
                       children: [
-                        // Placeholder for woman's image
+                        // Draft image if available, otherwise placeholder
                         Container(
                           width: double.infinity,
                           height: double.infinity,
@@ -324,38 +342,68 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
                           ),
                           child: Stack(
                             children: [
-                              // Network image as background
-                              Image.network(
-                                'https://via.placeholder.com/400x300/b1997d/ffffff?text=Jessica',
-                                width: double.infinity,
-                                height: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  print('Main image error: $error');
-                                  return Container(
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Color(0xFFb1997d).withOpacity(0.4),
-                                          Color(0xFF8B7355).withOpacity(0.3),
-                                          Color(0xFF5A4A3A).withOpacity(0.2),
-                                        ],
+                              if (primary != null)
+                                Image.network(
+                                  primary,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    debugPrint(
+                                        '[ReviewRecommendation] image failed: $primary');
+                                    return Container(
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            const Color(0xFFb1997d)
+                                                .withOpacity(0.4),
+                                            const Color(0xFF8B7355)
+                                                .withOpacity(0.3),
+                                            const Color(0xFF5A4A3A)
+                                                .withOpacity(0.2),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.person,
-                                        size: 80,
-                                        color: Colors.white70,
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.broken_image_outlined,
+                                          size: 56,
+                                          color: Colors.white70,
+                                        ),
                                       ),
+                                    );
+                                  },
+                                )
+                              else
+                                Container(
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        const Color(0xFFb1997d)
+                                            .withOpacity(0.25),
+                                        const Color(0xFF8B7355)
+                                            .withOpacity(0.2),
+                                        const Color(0xFF5A4A3A)
+                                            .withOpacity(0.15),
+                                      ],
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.image_outlined,
+                                      size: 64,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                ),
                               // Overlay gradient for better text visibility
                               Container(
                                 decoration: BoxDecoration(

@@ -4,7 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../layout/main_layout.dart';
 import '../core/app_colors.dart';
 import '../services/recommendation_service.dart';
-import '../core/app_styles.dart';
+import '../utils/app_styles.dart';
+import '../models/recommendation_models.dart';
 
 class AutomationQueueScreen extends StatefulWidget {
   const AutomationQueueScreen({super.key});
@@ -266,6 +267,7 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
             queuedTime: _formatDate(item.queuedAt),
             tokens: item.tokensDeducted,
             statusColor: _statusColor(item.status),
+            rejectionReason: item.rejectionReason,
           );
         },
       ),
@@ -278,6 +280,7 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
     required String queuedTime,
     required int tokens,
     Color statusColor = Colors.blue,
+    String? rejectionReason,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -336,6 +339,42 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
                 fontSize: 12,
               ),
             ),
+            if (status.toLowerCase() == 'rejected' &&
+                rejectionReason != null &&
+                rejectionReason.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.withOpacity(0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Admin comment',
+                      style: TextStyle(
+                        color: Colors.red.shade200,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      rejectionReason,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/recommendation_models.dart';
@@ -176,6 +175,7 @@ class RecommendationService {
     required String promotionTitle,
     required int tokenCost,
     String? propertyId,
+    List<String>? imageUrls,
   }) async {
     try {
       // Check wallet balance
@@ -203,16 +203,77 @@ class RecommendationService {
         throw Exception('Failed to deduct tokens');
       }
 
+      // Prefer caller-provided image URLs (dashboard upload flow). If none were
+      // provided, fall back to selecting random images from the user's gallery.
+      List<String> selectedImages = (imageUrls != null && imageUrls.isNotEmpty)
+          ? List<String>.from(imageUrls)
+          : const [];
+
+      if (selectedImages.isEmpty) {
+        try {
+          final userRow = await Supabase.instance.client
+              .from('users')
+              .select('gallery_urls')
+              .eq('id', userId)
+              .maybeSingle();
+          final gallery =
+              (userRow != null && userRow['gallery_urls'] is List)
+                  ? List<String>.from(userRow['gallery_urls'] as List)
+                  : <String>[];
+
+          if (gallery.isNotEmpty) {
+            gallery.shuffle();
+            selectedImages =
+                gallery.take(gallery.length >= 3 ? 3 : gallery.length).toList();
+          }
+        } catch (e) {
+          print('Error selecting images for task: $e');
+        }
+      }
+
       // Add to automation queue using RPC function
       try {
         print('DEBUG: Creating automation task with userId: $userId, promotionId: $promotionId, status: pending');
-        final result = await Supabase.instance.client.rpc('create_automation_task', params: {
-          'p_user_id': userId,
-          'p_task_type': promotionId,
-          'p_status': 'pending', // Changed from 'queued' to 'pending' for approval workflow
-        });
-        
+        final result = await Supabase.instance.client.rpc(
+          'create_automation_task',
+          params: {
+            'p_user_id': userId,
+            'p_task_type': promotionId,
+            'p_status': 'pending', // approval workflow
+          },
+        );
+
         print('Automation task created successfully: $result');
+
+        // Persist selectedImages onto the task row (works even if the RPC signature
+        // doesn't support p_image_urls).
+        try {
+          String? taskId;
+          if (result is List && result.isNotEmpty) {
+            final row = result.first;
+            if (row is Map) {
+              taskId = (row['task_id'] ?? row['id'])?.toString();
+            }
+          } else if (result is Map) {
+            taskId = (result['task_id'] ?? result['id'])?.toString();
+          }
+
+          if (taskId != null &&
+              taskId.isNotEmpty &&
+              selectedImages.isNotEmpty) {
+            await Supabase.instance.client
+                .from('automation_tasks')
+                .update({'image_urls': selectedImages})
+                .eq('id', taskId);
+            print('Saved image_urls on automation_tasks.$taskId');
+          }
+        } catch (e) {
+          // If the column doesn't exist yet, ignore (DB patch not applied).
+          final msg = e.toString();
+          if (!msg.contains('image_urls') || !msg.contains('does not exist')) {
+            print('Failed to persist image_urls on task: $e');
+          }
+        }
       } catch (e) {
         print('Error creating automation task via RPC: $e');
         throw Exception('Failed to create automation task: $e');
@@ -275,6 +336,7 @@ class RecommendationService {
           queuedAt: DateTime.parse(row['created_at']),
           status: _mapStatus(row['status']),
           propertyId: null,
+          rejectionReason: row['rejection_reason'] as String?,
         );
       }).toList();
     } catch (e) {
@@ -299,6 +361,7 @@ class RecommendationService {
               queuedAt: DateTime.parse(row['created_at']),
               status: _mapStatus(row['status']),
               propertyId: null,
+              rejectionReason: row['rejection_reason'] as String?,
             );
           }).toList();
         });
@@ -442,9 +505,4 @@ class RecommendationService {
     }
   }
 
-  String _generateId() {
-    final uuid = const Uuid().v4();
-    print('Generated UUID: $uuid');
-    return uuid;
-  }
 }

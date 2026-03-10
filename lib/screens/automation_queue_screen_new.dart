@@ -286,7 +286,45 @@ class _AutomationQueueScreenState extends State<AutomationQueueScreen> {
               ),
             ],
           ),
-          
+
+          // Admin rejection comment (if present)
+          if (item.status.toLowerCase() == 'rejected' &&
+              item.rejectionReason != null &&
+              item.rejectionReason!.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.withOpacity(0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Admin comment',
+                    style: TextStyle(
+                      color: Colors.red.shade200,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.rejectionReason!,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Additional metadata if available
           if (item.metadata != null && item.metadata!.isNotEmpty) ...[
             const SizedBox(height: 12),

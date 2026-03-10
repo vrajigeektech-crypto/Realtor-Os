@@ -4,18 +4,22 @@ import '../../core/app_colors.dart';
 class ContentCard extends StatelessWidget {
   final String title;
   final String platform;
-  final String imageUrl;
+  final String imageUrl; // asset path OR public URL
+  final bool isNetworkImage;
   final String status;
   final int tokens;
   final VoidCallback onApprove; // <--- WIRE YOUR RPC HERE LATER
+  final VoidCallback onUploadImage;
 
   const ContentCard({
     required this.title,
     required this.platform,
     required this.imageUrl,
+    this.isNetworkImage = false,
     required this.status,
     required this.tokens,
     required this.onApprove,
+    required this.onUploadImage,
   });
 
   @override
@@ -47,7 +51,55 @@ class ContentCard extends StatelessWidget {
             child: Container(
               width: double.infinity,
               color: AppColors.surfaceHigh,
-              child: Center(child: Icon(Icons.image, color: Colors.white10)),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _CardImage(
+                      imageUrl: imageUrl,
+                      isNetwork: isNetworkImage,
+                    ),
+                  ),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: InkWell(
+                      onTap: onUploadImage,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.12),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.upload_rounded,
+                              size: 14,
+                              color: Color(0xFFCE9799),
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Upload',
+                              style: TextStyle(
+                                color: Color(0xFFEBE3DE),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           // Content Info
@@ -79,6 +131,43 @@ class ContentCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CardImage extends StatelessWidget {
+  final String imageUrl;
+  final bool isNetwork;
+  const _CardImage({required this.imageUrl, required this.isNetwork});
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) {
+      return const Center(child: Icon(Icons.image, color: Colors.white10));
+    }
+
+    if (isNetwork) {
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('[ContentCard] image failed: $imageUrl');
+          return const Center(
+            child: Icon(Icons.broken_image_outlined, color: Colors.white24),
+          );
+        },
+      );
+    }
+
+    return Image.asset(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('[ContentCard] asset failed: $imageUrl');
+        return const Center(
+          child: Icon(Icons.broken_image_outlined, color: Colors.white24),
+        );
+      },
     );
   }
 }
