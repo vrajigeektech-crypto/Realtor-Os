@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:demo/layout/main_layout.dart';
 import 'package:demo/screens/wallet_dashboard.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -69,27 +70,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         String? url;
 
         if (type == 'logo') {
-          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/logo/logo.png');
+          url = await _uploadFile(
+            file,
+            'user_assets',
+            '${SupabaseService.instance.client.auth.currentUser!.id}/logo/logo.png',
+          );
           if (url != null) {
             await OnboardingService.updateOnboardingData({'logo_url': url});
             setState(() => _logoFile = file);
           }
         } else if (type == 'headshot') {
-          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/headshot/headshot.png');
+          url = await _uploadFile(
+            file,
+            'user_assets',
+            '${SupabaseService.instance.client.auth.currentUser!.id}/headshot/headshot.png',
+          );
           if (url != null) {
             await OnboardingService.updateOnboardingData({'headshot_url': url});
             setState(() => _headshotFile = file);
           }
         } else if (type == 'voice') {
-          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/voice/voice.${_ext(file.name)}');
+          url = await _uploadFile(
+            file,
+            'user_assets',
+            '${SupabaseService.instance.client.auth.currentUser!.id}/voice/voice.${_ext(file.name)}',
+          );
           if (url != null) {
-            await OnboardingService.updateOnboardingData({'voice_sample_url': url});
+            await OnboardingService.updateOnboardingData({
+              'voice_sample_url': url,
+            });
             setState(() => _voiceFile = file);
           }
         } else if (type == 'writing') {
-          url = await _uploadFile(file, 'user_assets', '${SupabaseService.instance.client.auth.currentUser!.id}/writing/sample.${_ext(file.name)}');
+          url = await _uploadFile(
+            file,
+            'user_assets',
+            '${SupabaseService.instance.client.auth.currentUser!.id}/writing/sample.${_ext(file.name)}',
+          );
           if (url != null) {
-            await OnboardingService.updateOnboardingData({'writing_sample': url});
+            await OnboardingService.updateOnboardingData({
+              'writing_sample': url,
+            });
             setState(() => _writingFile = file);
           }
         } else if (type == 'multi_image') {
@@ -110,17 +131,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return dot >= 0 ? name.substring(dot + 1).toLowerCase() : 'png';
   }
 
-  Future<String?> _uploadFile(PlatformFile file, String bucketName, String path) async {
+  Future<String?> _uploadFile(
+    PlatformFile file,
+    String bucketName,
+    String path,
+  ) async {
     try {
       final supabase = SupabaseService.instance.client;
 
       await supabase.storage
           .from(bucketName)
           .uploadBinary(
-        path,
-        file.bytes!,
-        fileOptions: const FileOptions(upsert: true),
-      );
+            path,
+            file.bytes!,
+            fileOptions: const FileOptions(upsert: true),
+          );
 
       return supabase.storage.from(bucketName).getPublicUrl(path);
     } catch (e) {
@@ -130,11 +155,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _nextPage() async {
-    if (_currentPage < 6) { // Back to 7 steps total (0-6)
+    if (_currentPage < 6) {
+      // Back to 7 steps total (0-6)
       // Logic for each step validation/upload
       bool canProceed = true;
 
-      if (_currentPage == 2) { // Company Name step
+      if (_currentPage == 2) {
+        // Company Name step
         if (_companyNameController.text.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Please enter a company name')),
@@ -171,14 +198,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const WalletDashboard()),
+          MaterialPageRoute(
+            builder: (context) => const MainLayoutWrapper(activeIndex: 0),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving onboarding: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error saving onboarding: $e')));
       }
     } finally {
       if (mounted) setState(() => _isCompletingOnboarding = false);
@@ -197,7 +226,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 LinearProgressIndicator(
                   value: (_currentPage + 1) / 7,
                   backgroundColor: AppColors.cardBackground,
-                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.buttonGold),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppColors.buttonGold,
+                  ),
                 ),
                 Expanded(
                   child: PageView(
@@ -214,14 +245,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         'Your company logo will be used in your property listings.',
                         Icons.business,
                         _logoFile,
-                            () => _pickFile('logo'),
+                        () => _pickFile('logo'),
                       ),
                       _buildUploadStep(
                         'Upload Headshot',
                         'A professional headshot helps build trust with clients.',
                         Icons.person,
                         _headshotFile,
-                            () => _pickFile('headshot'),
+                        () => _pickFile('headshot'),
                       ),
                       _buildInputStep(
                         'Company Name',
@@ -243,7 +274,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         'Upload an MP3 sample of your voice for AI generation.',
                         Icons.mic,
                         _voiceFile,
-                            () => _pickFile('voice'),
+                        () => _pickFile('voice'),
                         subtitle: 'Supported format: MP3',
                       ),
                       _buildUploadStep(
@@ -251,7 +282,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         'Upload a sample of your writing style (Email, Blog, etc.).',
                         Icons.edit_note,
                         _writingFile,
-                            () => _pickFile('writing'),
+                        () => _pickFile('writing'),
                       ),
                       _buildMultiPhotoStep(),
                     ],
@@ -266,7 +297,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 color: Colors.black54,
                 child: const Center(
                   child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.buttonGold),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.buttonGold,
+                    ),
                   ),
                 ),
               ),
@@ -277,13 +310,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildUploadStep(
-      String title,
-      String description,
-      IconData icon,
-      PlatformFile? file,
-      VoidCallback onPick, {
-        String? subtitle,
-      }) {
+    String title,
+    String description,
+    IconData icon,
+    PlatformFile? file,
+    VoidCallback onPick, {
+    String? subtitle,
+  }) {
     return Padding(
       padding: const EdgeInsets.all(40.0),
       child: Column(
@@ -291,12 +324,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           Icon(icon, size: 80, color: AppColors.buttonGold),
           const SizedBox(height: 32),
-          Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
           const SizedBox(height: 16),
-          Text(description, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
           if (subtitle != null) ...[
             const SizedBox(height: 8),
-            Text(subtitle, style: const TextStyle(color: Colors.white30, fontSize: 12)),
+            Text(
+              subtitle,
+              style: const TextStyle(color: Colors.white30, fontSize: 12),
+            ),
           ],
           const SizedBox(height: 48),
           _buildFilePreview(file, onPick),
@@ -318,7 +365,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(file != null ? Icons.check_circle : Icons.upload_file, color: AppColors.buttonGold),
+            Icon(
+              file != null ? Icons.check_circle : Icons.upload_file,
+              color: AppColors.buttonGold,
+            ),
             const SizedBox(width: 12),
             Flexible(
               child: Text(
@@ -334,13 +384,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildInputStep(
-      String title,
-      String description,
-      IconData icon,
-      String label,
-      TextEditingController controller, {
-        int maxLines = 1,
-      }) {
+    String title,
+    String description,
+    IconData icon,
+    String label,
+    TextEditingController controller, {
+    int maxLines = 1,
+  }) {
     return Padding(
       padding: const EdgeInsets.all(40.0),
       child: Column(
@@ -348,9 +398,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           Icon(icon, size: 80, color: AppColors.buttonGold),
           const SizedBox(height: 32),
-          Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
           const SizedBox(height: 16),
-          Text(description, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
           const SizedBox(height: 40),
           TextField(
             controller: controller,
@@ -361,8 +422,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               hintStyle: const TextStyle(color: Colors.white24),
               filled: true,
               fillColor: AppColors.cardBackground,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.buttonGold)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppColors.buttonGold),
+              ),
             ),
           ),
         ],
@@ -378,20 +445,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           const Icon(Icons.collections, size: 80, color: AppColors.buttonGold),
           const SizedBox(height: 32),
-          const Text('Photos Upload', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const Text(
+            'Photos Upload',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
           const SizedBox(height: 16),
-          const Text('Share some of your best property photos or lifestyle shots.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
+          const Text(
+            'Share some of your best property photos or lifestyle shots.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
           const SizedBox(height: 32),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              ..._photos.map((f) => Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
-                child: const Icon(Icons.image, color: Colors.white30, size: 20),
-              )),
+              ..._photos.map(
+                (f) => Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.image,
+                    color: Colors.white30,
+                    size: 20,
+                  ),
+                ),
+              ),
               InkWell(
                 onTap: () => _pickFile('multi_image'),
                 child: Container(
@@ -400,7 +487,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.buttonGold.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: AppColors.buttonGold.withOpacity(0.3)),
+                    border: Border.all(
+                      color: AppColors.buttonGold.withOpacity(0.3),
+                    ),
                   ),
                   child: const Icon(Icons.add, color: AppColors.buttonGold),
                 ),
@@ -410,7 +499,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           if (_photos.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: Text('${_photos.length} photos selected', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              child: Text(
+                '${_photos.length} photos selected',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
             ),
         ],
       ),
@@ -425,9 +517,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           if (_currentPage > 0)
             TextButton(
               onPressed: () {
-                _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                _pageController.previousPage(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
               },
-              child: const Text('Previous', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+              child: const Text(
+                'Previous',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+              ),
             ),
           const Spacer(),
           ElevatedButton(
@@ -436,7 +534,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               backgroundColor: AppColors.buttonGold,
               foregroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: Text(
               _currentPage == 6 ? 'Complete Onboarding' : 'Next',

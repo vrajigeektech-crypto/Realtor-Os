@@ -1,3 +1,4 @@
+import 'package:demo/admin_pannel/admin_login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/supabase_service.dart';
@@ -395,6 +396,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
+                    ),
+                  ),
+
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => AdminLoginScreen(),));
+                    },
+                    child: Text(
+                      'Login Admin Pannel',
+                      style: TextStyle(
+                          color: Colors.orange.withValues(alpha: 0.7),
+                          fontSize: 16,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.bold
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ],

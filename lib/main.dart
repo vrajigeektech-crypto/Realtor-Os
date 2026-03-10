@@ -212,6 +212,7 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       // : AdminMainScreen(),
       : MainLayoutWrapper(activeIndex: 0),
     routes: {
+        '/admin_login': (context) => const AdminLoginScreen(),
         // New flow routes
         '/new_flow/welcome': (context) => const NewFlowWelcomeScreen(),
         '/new_flow/setup_profile': (context) => const NewFlowProfileSetupScreen(),

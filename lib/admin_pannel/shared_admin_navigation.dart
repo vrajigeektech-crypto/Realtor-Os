@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
+import '../services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SharedAdminNavigation extends StatelessWidget {
   final int selectedIndex;
@@ -12,6 +14,27 @@ class SharedAdminNavigation extends StatelessWidget {
     required this.onSelect,
     this.workspaceName = 'Workspace',
   });
+
+  Future<void> _logout(BuildContext context) async {
+    try {
+      await SupabaseService.instance.client.auth.signOut();
+      if (context.mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/admin_login',
+          (Route<dynamic> route) => false,
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error logging out: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   static const List<(IconData, String)> navItems = [
     (Icons.grid_view_rounded, 'Dashboard'),
@@ -64,6 +87,42 @@ class SharedAdminNavigation extends StatelessWidget {
             selected: e.key == selectedIndex,
             onTap: () => onSelect(e.key),
           )),
+          const Spacer(),
+          // Logout Button
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: GestureDetector(
+              onTap: () => _logout(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.logout,
+                      size: 15,
+                      color: Colors.red,
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );

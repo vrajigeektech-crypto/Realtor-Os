@@ -16,6 +16,8 @@ import '../screens/wallet_screen.dart';
 import '../screens/recommendation_screen.dart';
 import '../screens/automation_queue_screen_new.dart';
 import '../services/balance_service.dart';
+import '../services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 // TODO: Re-enable when screens are implemented
 // import '../screens/calendar/calendar_screen.dart';
 // import '../screens/automation/automation_screen.dart';
@@ -93,6 +95,27 @@ class _MainLayoutState extends State<MainLayout> {
       setState(() {
         _isSidebarOpen = !_isSidebarOpen;
       });
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      await SupabaseService.instance.client.auth.signOut();
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/admin_login',
+          (Route<dynamic> route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error logging out: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -367,6 +390,41 @@ class _MainLayoutState extends State<MainLayout> {
                             size: 10,
                           ),
                         ),
+                        const SizedBox(width: 16),
+                        // Logout Button
+                        GestureDetector(
+                          onTap: _logout,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFCE9799).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFCE9799),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.logout,
+                                  color: Color(0xFFCE9799),
+                                  size: 16,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Logout',
+                                  style: TextStyle(
+                                    color: Color(0xFFCE9799),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                 ],
@@ -578,6 +636,34 @@ class _MainLayoutState extends State<MainLayout> {
                     14,
                     isDrawer: isDrawer,
                   ),
+                  // Logout Button for Mobile Drawer
+                  if (isDrawer) ...[
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white24),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.logout,
+                          color: Color(0xFFCE9799),
+                          size: 22,
+                        ),
+                        title: const Text(
+                          'Logout',
+                          style: TextStyle(
+                            color: Color(0xFFCE9799),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        onTap: () {
+                          Navigator.of(context).pop(); // Close drawer first
+                          _logout(); // Then logout
+                        },
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
