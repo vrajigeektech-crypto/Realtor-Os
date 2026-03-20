@@ -12,6 +12,7 @@ import '../new_flow/Core Money Engine/speed_to_lead_activation_controller.dart';
 import '../new_flow/Core Money Engine/speed_to_lead_metric_model.dart';
 import '../new_flow/Core Money Engine/lead_arrival_model.dart';
 import '../new_flow/Core Money Engine/speed_to_lead_metric_key.dart';
+import '../screens/crm_connections_screen.dart';
 import '../screens/wallet_screen.dart';
 import '../screens/recommendation_screen.dart';
 import '../screens/automation_queue_screen_new.dart';
@@ -636,6 +637,13 @@ class _MainLayoutState extends State<MainLayout> {
                     14,
                     isDrawer: isDrawer,
                   ),
+                  _buildSidebarItem(
+                    context,
+                    Icons.people_alt_outlined,
+                    'CRM Connection',
+                    17,
+                    isDrawer: isDrawer,
+                  ),
                   // Logout Button for Mobile Drawer
                   if (isDrawer) ...[
                     const SizedBox(height: 20),
@@ -861,6 +869,11 @@ class _MainLayoutState extends State<MainLayout> {
           context,
           MaterialPageRoute(builder: (context) => const MainLayoutWrapper(activeIndex: 16)),
         );
+      } else if (index == 17 && widget.activeIndex != 17) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MainLayoutWrapper(activeIndex: 17)),
+        );
       }
     }
   }
@@ -922,6 +935,8 @@ class MainLayoutWrapper extends StatelessWidget {
         return 'Promotion Marketplace';
       case 16:
         return 'Automation Queue';
+      case 17:
+        return 'CRM Connection Dashboard';
       default:
         return 'Realtor OS';
     }
@@ -1011,6 +1026,8 @@ class MainLayoutWrapper extends StatelessWidget {
         return const RecommendationScreen();
       case 16:
         return const AutomationQueueScreen();
+      case 17:
+        return const CrmConnectionsScreen();
       default:
         return DashboardScreen();
     }

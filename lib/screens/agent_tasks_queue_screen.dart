@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'agent_detail_host_screen.dart';
-import 'widgets/task_widgets.dart';
+import '../utils/app_styles.dart';
 
 class AgentTasksQueueScreen extends StatelessWidget {
   const AgentTasksQueueScreen({super.key});
@@ -112,6 +112,75 @@ class _AgentTasksContentState extends State<AgentTasksContent> {
               )
               .toList(),
         ),
+      ),
+    );
+  }
+}
+
+class TaskListItem extends StatelessWidget {
+  const TaskListItem({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.status,
+  });
+
+  final String title;
+  final String subtitle;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppStyles.cardColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppStyles.borderSoft),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppStyles.mutedText,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppStyles.accentRose.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppStyles.accentRose),
+            ),
+            child: Text(
+              status,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -112,33 +112,55 @@ serve(async (req) => {
 
     // Get environment variables
     const FUB_CLIENT_ID = Deno.env.get('FUB_CLIENT_ID');
-    const FUB_REDIRECT_URI = Deno.env.get('FUB_REDIRECT_URI');
+    const FUB_REDIRECT_URI_ENV = Deno.env.get('FUB_REDIRECT_URI'); // default (mobile/server)
 
-    // Log the values being used (for debugging)
     console.log('🔐 [FUB Auth] FUB_CLIENT_ID from env:', FUB_CLIENT_ID ? `${FUB_CLIENT_ID.substring(0, 20)}...` : 'NOT SET');
-    console.log('🔐 [FUB Auth] FUB_REDIRECT_URI from env:', FUB_REDIRECT_URI || 'NOT SET');
+    console.log('🔐 [FUB Auth] FUB_REDIRECT_URI from env:', FUB_REDIRECT_URI_ENV || 'NOT SET');
 
-    // Check if FUB_CLIENT_ID is missing - throw 500 error
     if (!FUB_CLIENT_ID) {
       console.error('❌ [FUB Auth] FUB_CLIENT_ID is missing from environment');
       return new Response(
-        JSON.stringify({ 
-          error: 'Server configuration error',
-          details: 'FUB_CLIENT_ID environment variable is not set'
-        }),
+        JSON.stringify({ error: 'Server configuration error', details: 'FUB_CLIENT_ID not set' }),
         { status: 500, headers: corsHeaders },
       );
     }
 
-    // Validate redirect URI
-    if (!FUB_REDIRECT_URI) {
+    if (!FUB_REDIRECT_URI_ENV) {
       console.error('❌ [FUB Auth] FUB_REDIRECT_URI is missing from environment');
       return new Response(
-        JSON.stringify({ 
-          error: 'Server configuration error',
-          details: 'FUB_REDIRECT_URI environment variable is not set'
-        }),
+        JSON.stringify({ error: 'Server configuration error', details: 'FUB_REDIRECT_URI not set' }),
         { status: 500, headers: corsHeaders },
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // Allow callers to override redirect_uri (e.g. Flutter Web uses the app's
+    // hash-based URL; mobile uses the server-side fub-callback function).
+    // Validate against an allowlist to prevent open-redirect attacks.
+    // -------------------------------------------------------------------------
+    const FLUTTER_WEB_URL = Deno.env.get('FLUTTER_WEB_URL') ?? 'https://realtor--os.web.app';
+    const WEB_REDIRECT_URI = `${FLUTTER_WEB_URL}/#/oauth/callback`;
+
+    const ALLOWED_REDIRECT_URIS = new Set([
+      FUB_REDIRECT_URI_ENV,  // server-side callback (mobile / legacy)
+      WEB_REDIRECT_URI,      // Flutter Web direct callback
+    ]);
+
+    // Parse optional JSON body sent by the Flutter Web client
+    let requestBody: { redirect_uri?: string } = {};
+    try {
+      if (req.headers.get('content-type')?.includes('application/json')) {
+        requestBody = await req.json();
+      }
+    } catch (_) { /* no body – use env default */ }
+
+    const redirectUri = requestBody.redirect_uri?.trim() ?? FUB_REDIRECT_URI_ENV;
+
+    if (!ALLOWED_REDIRECT_URIS.has(redirectUri)) {
+      console.error('❌ [FUB Auth] redirect_uri not in allowlist:', redirectUri);
+      return new Response(
+        JSON.stringify({ error: 'Invalid redirect_uri', details: 'Not in server allowlist' }),
+        { status: 400, headers: corsHeaders },
       );
     }
 
@@ -148,15 +170,13 @@ serve(async (req) => {
     // Build OAuth URL for Follow Up Boss
     const authUrl = new URL('https://app.followupboss.com/oauth/authorize');
     authUrl.searchParams.set('client_id', FUB_CLIENT_ID);
-    authUrl.searchParams.set('redirect_uri', FUB_REDIRECT_URI);
-    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'auth_code'); // FUB uses 'auth_code' not standard 'code'
     authUrl.searchParams.set('scope', 'people notes calls textMessages emEvents stages users deals pipelines webhooks');
-    authUrl.searchParams.set('state', userId); // User ID from public.users passed as state parameter
+    authUrl.searchParams.set('state', userId); // echoed back by FUB; used to identify the user on return
 
     console.log('✅ [FUB Auth] OAuth URL generated for user:', userId);
-    console.log('🔐 [FUB Auth] Using client_id:', FUB_CLIENT_ID);
-    console.log('🔐 [FUB Auth] Using redirect_uri:', FUB_REDIRECT_URI);
-    console.log('🔐 [FUB Auth] Full OAuth URL:', authUrl.toString());
+    console.log('🔐 [FUB Auth] Using redirect_uri:', redirectUri);
 
     // Return the OAuth URL in JSON format
     return new Response(

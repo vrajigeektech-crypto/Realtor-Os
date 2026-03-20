@@ -2,155 +2,189 @@
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'supabase_service.dart';
+import '../utils/web_redirect.dart';
 
 class FollowUpBossAuthService {
   final _supabase = SupabaseService.instance.client;
   static const String _systemKey = 'faf48c01b12e37eed790202040ff847f';
   static const String _systemName = 'Realtor_OS';
-  // Service role key for testing (matches main.dart)
-  static const String _serviceRoleKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hY2VucnVrb2RmZ2Zlb3dycXFmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTI4MTgzMSwiZXhwIjoyMDgwODU3ODMxfQ.O45T2KaEGQczxhGco1VNb_88cFd0Wo66_YW_u_kc_GU';
 
-  Future<void> initiateAuth() async {
+  /// The redirect URI used for Flutter Web OAuth.
+  ///
+  /// MUST be registered in Follow Up Boss app settings AND match exactly in
+  /// both the /authorize request (fub-auth) and the /token exchange (exchange-token).
+  ///
+  /// No '#' fragment — OAuth 2.0 (RFC 6749 §3.1.2) forbids fragment components
+  /// in redirect_uri values. Flutter Web uses path-based URL strategy instead.
+  static const String kWebRedirectUri =
+      'https://realtor--os.web.app/oauth/callback';
+
+  Future<void> connectWithApiKey({required String apiKey}) async {
     try {
-      debugPrint('🔐 [FUB] Starting authentication flow');
+      debugPrint('🔗 [FUB] Starting API key connection...');
 
       final session = _supabase.auth.currentSession;
-      final user = _supabase.auth.currentUser;
-
-      debugPrint('🔐 [FUB] Session: ${session != null ? "EXISTS" : "NULL"}');
-      debugPrint('🔐 [FUB] User: ${user?.email ?? "NULL"}');
-      
-      // Build headers - SDK automatically attaches Bearer token if user is logged in
-      final headers = <String, String>{
-        'X-System': _systemName,
-        'X-System-Key': _systemKey,
-      };
-      
-      Map<String, dynamic>? body;
-      
-      if (session != null) {
-        debugPrint('🔐 [FUB] Using user session - SDK will attach Bearer token automatically');
-        // SDK automatically attaches Authorization header when user is logged in
-      } else {
-        debugPrint('🔐 [FUB] No session - manually adding service_role token with test user ID');
-        // When no session, manually add service_role token and pass user_id in body
-        headers['Authorization'] = 'Bearer $_serviceRoleKey';
-        body = {'user_id': 'c819a131-ca23-4296-a26a-aed7e430c735'};
+      if (session == null) {
+        throw Exception('User not authenticated. Please sign in first.');
       }
 
-      debugPrint('🔐 [FUB] Calling edge function...');
-      debugPrint('🔐 [FUB] Headers: ${headers.keys.toList()}');
-      if (body != null) {
-        debugPrint('🔐 [FUB] Body: $body');
+      final accessToken = session.accessToken;
+      if (accessToken.isEmpty) {
+        throw Exception('Invalid session: access token is missing.');
       }
 
       final response = await _supabase.functions.invoke(
+        'fub_connect_private',
+        body: {'api_key': apiKey},
+        headers: {'Authorization': 'Bearer $accessToken'},
+      );
+
+      if (response.status == 401) {
+        throw Exception('Session expired. Please log in again.');
+      }
+
+      if (response.status != 200) {
+        final errorData = response.data as Map<String, dynamic>?;
+        final errorMessage =
+            errorData?['error'] as String? ??
+            errorData?['message'] as String? ??
+            'Connection failed';
+        throw Exception(errorMessage);
+      }
+
+      debugPrint('✅ [FUB] API key connection successful');
+    } catch (e, stackTrace) {
+      debugPrint('❌ [FUB] API key connection failed: $e');
+      debugPrint('   Stack: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Refreshes the OAuth access token using the stored refresh token.
+  /// Returns the new access token on success, or throws on failure.
+  /// Called automatically by [FollowUpBossContactService] when the token is
+  /// expired or a 401 is received.
+  Future<String> refreshToken() async {
+    debugPrint('🔄 [FUB] Refreshing OAuth access token...');
+
+    final session = _supabase.auth.currentSession;
+    if (session == null) {
+      throw Exception('User not authenticated. Please sign in first.');
+    }
+
+    final response = await _supabase.functions.invoke(
+      'fub-refresh',
+      headers: {'Authorization': 'Bearer ${session.accessToken}'},
+    );
+
+    if (response.status != 200) {
+      final errorData = response.data as Map<String, dynamic>?;
+      final errorMsg =
+          errorData?['details'] as String? ??
+          errorData?['error'] as String? ??
+          'Token refresh failed';
+      throw Exception(errorMsg);
+    }
+
+    final data = response.data as Map<String, dynamic>;
+    final newToken = data['access_token'] as String?;
+    if (newToken == null || newToken.isEmpty) {
+      throw Exception('No access token in refresh response');
+    }
+
+    debugPrint('✅ [FUB] Token refreshed successfully');
+    return newToken;
+  }
+
+  /// Initiates the OAuth flow. Opens the FUB authorization page in an external
+  /// browser. The server-side `fub-callback` edge function handles the redirect
+  /// and saves tokens to `user_crm_connections`. On success the browser fires
+  /// the `realtoros://fub-success` deep link so the app can refresh its state.
+  Future<void> initiateAuth() async {
+    try {
+      debugPrint('🔐 [FUB] Starting OAuth flow');
+
+      final session = _supabase.auth.currentSession;
+      if (session == null) {
+        throw Exception('User not authenticated. Please sign in first.');
+      }
+
+      debugPrint('🔐 [FUB] Calling fub-auth edge function...');
+
+      final response = await _supabase.functions.invoke(
         'fub-auth',
-        headers: headers,
-        body: body,
+        headers: {
+          'Authorization': 'Bearer ${session.accessToken}',
+          'X-System': _systemName,
+          'X-System-Key': _systemKey,
+        },
       );
 
       debugPrint('🔐 [FUB] Response status: ${response.status}');
-      debugPrint('🔐 [FUB] Response data type: ${response.data?.runtimeType ?? "null"}');
-      debugPrint('🔐 [FUB] Response data: ${response.data}');
 
       if (response.status != 200) {
-        final errorMsg = response.data?.toString() ?? 'Unknown error';
-        throw Exception('Edge function failed: $errorMsg');
-      }
-
-      if (response.data == null) {
-        debugPrint('❌ [FUB] Response data is null');
-        throw Exception('No response data from server');
+        final errorData = response.data as Map<String, dynamic>?;
+        final errorMsg =
+            errorData?['details'] as String? ??
+            errorData?['error'] as String? ??
+            response.data?.toString() ??
+            'Unknown error';
+        throw Exception('Could not start OAuth: $errorMsg');
       }
 
       final data = response.data as Map<String, dynamic>?;
       final authUrl = data?['url'] as String?;
 
       if (authUrl == null || authUrl.isEmpty) {
-        debugPrint('❌ [FUB] No URL in response: $data');
         throw Exception('No OAuth URL returned from server');
       }
 
-      debugPrint('🔐 [FUB] OAuth URL received: ${authUrl.substring(0, 50)}...');
-      debugPrint('🔐 [FUB] Opening URL in browser...');
+      debugPrint('🔐 [FUB] Opening OAuth URL in browser...');
 
       final uri = Uri.parse(authUrl);
-      final canLaunch = await canLaunchUrl(uri);
-
-      debugPrint('🔐 [FUB] Can launch URL: $canLaunch');
-
-      if (canLaunch) {
-        final launched = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
-        debugPrint('🔐 [FUB] Launch result: $launched');
-
-        if (launched) {
-          debugPrint('✅ [FUB] Browser opened successfully');
-        } else {
-          debugPrint('❌ [FUB] Failed to open browser');
-          throw Exception('Could not open browser');
-        }
-      } else {
-        debugPrint('❌ [FUB] Cannot launch URL: $authUrl');
+      if (!await canLaunchUrl(uri)) {
         throw Exception('Could not launch OAuth URL');
       }
-    } catch (e, stackTrace) {
-      debugPrint('❌ [FUB] Error: $e');
-      debugPrint('   Stack: $stackTrace');
-      rethrow;
-    }
-  }
 
-  Future<Map<String, dynamic>> handleCallback(
-    Map<String, dynamic> params,
-  ) async {
-    try {
-      debugPrint('🔐 [FUB] Handling OAuth callback');
-
-      final session = _supabase.auth.currentSession;
-      if (session == null) {
-        throw Exception('User not authenticated');
-      }
-
-      final response = await _supabase.functions.invoke(
-        'fub-callback',
-        body: params,
-        headers: {
-          'Authorization': 'Bearer ${session.accessToken}',
-          'X-System': _systemName,
-          'X-System-Key': _systemKey,
-        },
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
       );
-
-      debugPrint('🔐 [FUB] Callback response: ${response.data}');
-
-      if (response.status != 200) {
-        throw Exception('OAuth callback failed: ${response.data}');
+      if (!launched) {
+        throw Exception('Could not open browser');
       }
 
-      return response.data as Map<String, dynamic>? ?? {};
+      debugPrint('✅ [FUB] Browser opened for OAuth');
     } catch (e, stackTrace) {
-      debugPrint('❌ [FUB] Callback error: $e');
+      debugPrint('❌ [FUB] OAuth initiation failed: $e');
       debugPrint('   Stack: $stackTrace');
       rethrow;
     }
   }
 
-  Future<Map<String, dynamic>> fetchApiData() async {
+  /// Web-specific OAuth flow: redirects the *current browser tab* to the FUB
+  /// authorization page. FUB will redirect back to:
+  ///   https://YOUR_DOMAIN/#/oauth/callback?code=AUTH_CODE&state=USER_ID
+  ///
+  /// The [OAuthCallbackScreen] handles that return URL, exchanges the code for
+  /// tokens via the `exchange-token` Supabase edge function, and saves the
+  /// connection. This method should only be called when [kIsWeb] is `true`;
+  /// use [initiateAuth] for mobile/desktop.
+  Future<void> initiateAuthForWeb() async {
     try {
-      debugPrint('📡 [FUB API] Fetching API data');
+      debugPrint('🔐 [FUB] Starting Web OAuth flow (full-page redirect)');
 
       final session = _supabase.auth.currentSession;
       if (session == null) {
-        throw Exception('User not authenticated');
+        throw Exception('User not authenticated. Please sign in first.');
       }
 
+      // Call the fub-auth edge function to get the signed OAuth URL.
+      // Pass redirect_uri explicitly so fub-auth uses the Flutter Web callback
+      // route instead of the default server-side fub-callback function.
       final response = await _supabase.functions.invoke(
-        'fub-api-data',
+        'fub-auth',
+        body: {'redirect_uri': kWebRedirectUri},
         headers: {
           'Authorization': 'Bearer ${session.accessToken}',
           'X-System': _systemName,
@@ -159,13 +193,31 @@ class FollowUpBossAuthService {
       );
 
       if (response.status != 200) {
-        throw Exception('Failed to fetch API data: ${response.data}');
+        final errorData = response.data as Map<String, dynamic>?;
+        final errorMsg =
+            errorData?['details'] as String? ??
+            errorData?['error'] as String? ??
+            'Unknown error';
+        throw Exception('Could not start OAuth: $errorMsg');
       }
 
-      debugPrint('✅ [FUB API] API data fetched successfully');
-      return response.data as Map<String, dynamic>? ?? {};
+      final data = response.data as Map<String, dynamic>?;
+      final authUrl = data?['url'] as String?;
+
+      if (authUrl == null || authUrl.isEmpty) {
+        throw Exception('No OAuth URL returned from server');
+      }
+
+      debugPrint('🔐 [FUB] Redirecting browser to OAuth URL…');
+
+      // Full-page redirect: the browser navigates to FUB, completes OAuth,
+      // then FUB redirects back to /#/oauth/callback with `code` + `state`.
+      // Uses dart:html window.location.href on web; no-op stub on other platforms.
+      redirectToUrl(authUrl);
+
+      debugPrint('✅ [FUB] Browser redirect initiated');
     } catch (e, stackTrace) {
-      debugPrint('❌ [FUB API] Failed to fetch API data: $e');
+      debugPrint('❌ [FUB] Web OAuth initiation failed: $e');
       debugPrint('   Stack: $stackTrace');
       rethrow;
     }

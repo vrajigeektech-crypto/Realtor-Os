@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'agent_detail_host_screen.dart';
-import 'widgets/spend_summary_widgets.dart';
+import '../utils/app_styles.dart';
+import '../widgets/spend_summary_widgets.dart';
 
 class AgentSpendSummaryCompactScreen extends StatelessWidget {
   const AgentSpendSummaryCompactScreen({super.key});
@@ -143,6 +144,30 @@ class _AgentSpendContentState extends State<AgentSpendContent> {
         SizedBox(height: 12),
         SpendStatCard(label: 'Next Recharge', value: '12 Days'),
       ],
+    );
+  }
+}
+
+class FidelityViewLedgerButton extends StatelessWidget {
+  const FidelityViewLedgerButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        onPressed: () {},
+        icon: const Icon(Icons.receipt_long, color: Colors.white),
+        label: const Text(
+          'View Ledger',
+          style: TextStyle(color: Colors.white),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: AppStyles.borderSoft),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          backgroundColor: AppStyles.cardColor,
+        ),
+      ),
     );
   }
 }

@@ -33,11 +33,21 @@ import 'layout/main_layout.dart';
 import 'new_flow/features/integrations/routes/google_integration_routes.dart';
 
 import 'services/stripe_service.dart';
+import 'screens/oauth_callback_screen.dart';
 import 'package:app_links/app_links.dart';
 import 'dart:async';
+// Path-based URL strategy for Flutter Web — removes the '#' from all URLs.
+// This is required because OAuth 2.0 (RFC 6749) forbids fragment components
+// in redirect_uri values, so https://domain/oauth/callback is used instead
+// of https://domain/#/oauth/callback.
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Must be called before runApp() to take effect.
+  if (kIsWeb) usePathUrlStrategy();
+
   if (kIsWeb) registerWebFileInputs();
 
   await SupabaseConfig.initialize();
@@ -82,9 +92,7 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       if (data.event == AuthChangeEvent.passwordRecovery) {
         debugPrint('🔐 [Main] Password recovery event detected');
         _navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (context) => const ResetPasswordScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const ResetPasswordScreen()),
         );
       } else if (mounted) {
         _checkStatus();
@@ -100,22 +108,59 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
 
   void _initDeepLinks() {
     _sub = AppLinks().uriLinkStream.listen((Uri? uri) {
-      if (uri != null) {
-        log("Deep link: $uri");
+      if (uri == null) return;
+      log("Deep link: $uri");
 
-        if (uri.host == 'payment-success') {
-          final sessionId = uri.queryParameters['session_id'];
-
-          if (sessionId != null) {
-            verifyPayment(sessionId);
-          }
+      if (uri.host == 'payment-success') {
+        final sessionId = uri.queryParameters['session_id'];
+        if (sessionId != null) {
+          verifyPayment(sessionId);
         }
+      }
 
-        if (uri.host == 'payment-cancel') {
-          print("Payment cancelled");
+      if (uri.host == 'payment-cancel') {
+        log("Payment cancelled");
+      }
+
+      // Follow Up Boss OAuth success
+      if (uri.host == 'fub-success') {
+        log("FUB OAuth success deep link received");
+        _showFubOAuthSuccessSnackBar();
+      }
+
+      // Generic OAuth callback (error path)
+      if (uri.host == 'oauth-callback') {
+        final error = uri.queryParameters['error'];
+        if (error != null && error.isNotEmpty) {
+          log("OAuth callback error: $error");
+          _showOAuthErrorSnackBar(error);
         }
       }
     });
+  }
+
+  void _showFubOAuthSuccessSnackBar() {
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      const SnackBar(
+        content: Text('Follow Up Boss connected successfully!'),
+        backgroundColor: Color(0xFF10b981),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showOAuthErrorSnackBar(String error) {
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        content: Text('OAuth error: $error'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   Future<void> verifyPayment(String sessionId) async {
@@ -124,9 +169,7 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
 
       final response = await Supabase.instance.client.functions.invoke(
         'verify-payment', // your edge function name
-        body: {
-          'session_id': sessionId,
-        },
+        body: {'session_id': sessionId},
       );
 
       if (response.data != null) {
@@ -147,7 +190,9 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       context: _navigatorKey.currentContext!,
       builder: (context) => AlertDialog(
         title: const Text('Payment Successful!'),
-        content: const Text('Your payment was successful and tokens have been added to your wallet.'),
+        content: const Text(
+          'Your payment was successful and tokens have been added to your wallet.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -163,7 +208,9 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       context: _navigatorKey.currentContext!,
       builder: (context) => AlertDialog(
         title: const Text('Payment Cancelled'),
-        content: const Text('Your payment was cancelled. No tokens were added to your wallet.'),
+        content: const Text(
+          'Your payment was cancelled. No tokens were added to your wallet.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -180,7 +227,7 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       debugPrint(
         '🔐 [Main] Auth check: ${session != null ? "logged in" : "not logged in"}',
       );
-      
+
       if (session != null) {
         _onboardingCompleted = await OnboardingService.isOnboardingCompleted();
         debugPrint('📋 [Main] Onboarding completed: $_onboardingCompleted');
@@ -189,6 +236,33 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       debugPrint('⚠️ [Main] Error checking status: $e');
     }
     if (mounted) setState(() => _checkingAuth = false);
+
+    // After the main layout is ready, handle Flutter Web deep links.
+    // Supports both path-based routing (/oauth/callback  ← production)
+    // and hash-based routing (/#/oauth/callback ← fallback / legacy).
+    if (kIsWeb) {
+      final path = Uri.base.path;       // path-based: "/oauth/callback"
+      final fragment = Uri.base.fragment; // hash-based: "/oauth/callback?code=..."
+
+      final isOAuthCallback = path == '/oauth/callback' ||
+          fragment.startsWith('/oauth/callback');
+      final isFubSuccess =
+          path == '/fub-success' || fragment.startsWith('/fub-success');
+
+      if (isOAuthCallback) {
+        // FUB redirected back to this app with an authorization code.
+        // Push OAuthCallbackScreen on top of the home widget so the user
+        // can pop back to the main app after a successful connection.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _navigatorKey.currentState?.pushNamed('/oauth/callback');
+        });
+      } else if (isFubSuccess) {
+        // Legacy deep-link path from fub-callback edge function (mobile flow).
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showFubOAuthSuccessSnackBar();
+        });
+      }
+    }
   }
 
   @override
@@ -208,14 +282,17 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
           ? LoginScreen(onLoginSuccess: () => _checkStatus())
           : !_onboardingCompleted
           ? Expanded(child: OnboardingScreen())
-      // : AdminLoginScreen(),
-      // : AdminMainScreen(),
-      : MainLayoutWrapper(activeIndex: 0),
-    routes: {
+          // : AdminLoginScreen(),
+          // : AdminMainScreen(),
+          : MainLayoutWrapper(activeIndex: 0),
+      routes: {
         '/admin_login': (context) => const AdminLoginScreen(),
+        // Follow Up Boss Web OAuth callback
+        '/oauth/callback': (context) => const OAuthCallbackScreen(),
         // New flow routes
-        '/new_flow/welcome': (context) => const NewFlowWelcomeScreen(),
-        '/new_flow/setup_profile': (context) => const NewFlowProfileSetupScreen(),
+        '/new_flow/welcome': (context) => const NewFlowWelcomeScreen(),               
+        '/new_flow/setup_profile': (context) =>       
+            const NewFlowProfileSetupScreen(),                                                      
         '/new_flow/brand_setup': (context) => const NewFlowBrandSetupScreen(),
         '/new_flow/voice_setup': (context) => const NewFlowVoiceSetupScreen(),
         '/new_flow/complete': (context) => const NewFlowCompleteScreen(),

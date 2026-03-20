@@ -118,6 +118,20 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
   }
 }
 
+class AgentIntegrationsContent extends StatelessWidget {
+  const AgentIntegrationsContent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text(
+        'Integrations content coming soon',
+        style: TextStyle(color: Colors.white70),
+      ),
+    );
+  }
+}
+
 class _AgentHeader extends StatelessWidget {
   const _AgentHeader();
   @override

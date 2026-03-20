@@ -23,7 +23,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const FUB_CLIENT_ID = Deno.env.get('FUB_CLIENT_ID');
     const FUB_CLIENT_SECRET = Deno.env.get('FUB_CLIENT_SECRET');
-    const FUB_REDIRECT_URI = Deno.env.get('FUB_REDIRECT_URI');
+    const FUB_REDIRECT_URI = Deno.env.get('FUB_REDIRECT_URI') || 'realtoros://oauth-callback';
 
     // Log environment variables (for debugging)
     console.log('🔐 [FUB Callback] FUB_CLIENT_ID:', FUB_CLIENT_ID ? `${FUB_CLIENT_ID.substring(0, 20)}...` : 'NOT SET');
@@ -100,7 +100,7 @@ serve(async (req) => {
       );
     }
 
-    // Validate required parameters
+    // Validate required callback parameters early
     if (!code || !state) {
       console.error('❌ [FUB Callback] Missing code or state parameter');
       return new Response(
@@ -128,6 +128,35 @@ serve(async (req) => {
           status: 400,
           headers: { 'Content-Type': 'text/html' } 
         },
+      );
+    }
+
+    // Basic code sanity check before calling token endpoint.
+    // True expiry is enforced by FUB (invalid_grant) and surfaced below.
+    if (code.trim().length === 0 || code.length < 8) {
+      console.error('❌ [FUB Callback] Invalid authorization code format');
+      return new Response(
+        `<!DOCTYPE html>
+<html>
+<head>
+  <title>Invalid Authorization Code</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #1a1a1a; color: #fff; }
+    .error { color: #ff6b35; }
+  </style>
+</head>
+<body>
+  <h1 class="error">Connection Failed</h1>
+  <p>Authorization code is invalid or expired. Please reconnect and try again.</p>
+  <script>
+    setTimeout(() => {
+      window.location.href = 'realtoros://oauth-callback?error=${encodeURIComponent('Invalid authorization code')}';
+      setTimeout(() => window.close(), 1000);
+    }, 2000);
+  </script>
+</body>
+</html>`,
+        { status: 400, headers: { 'Content-Type': 'text/html' } },
       );
     }
 
@@ -175,26 +204,51 @@ serve(async (req) => {
     console.log('✅ [FUB Callback] User validated in public.users:', userId);
     console.log('🔄 [FUB Callback] Exchanging code for tokens for user:', userId);
 
-    // Step 1: Exchange authorization code for access token
+    // Step 1: Exchange authorization code for access token.
+    // FUB token endpoint: https://app.followupboss.com/oauth/token
+    // Credentials go in the Basic auth header only (client_id:client_secret).
+    // FUB requires: grant_type, code, redirect_uri, AND state in the form body.
+    const tokenBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: FUB_REDIRECT_URI,
+      state: state, // FUB requires state echoed back in the token exchange
+    });
+
     const tokenResponse = await fetch('https://app.followupboss.com/oauth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'X-System': SYSTEM_NAME,
-        'X-System-Key': SYSTEM_KEY,
+        'Authorization': `Basic ${btoa(`${FUB_CLIENT_ID}:${FUB_CLIENT_SECRET}`)}`,
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: code,
-        redirect_uri: FUB_REDIRECT_URI,
-        client_id: FUB_CLIENT_ID,
-        client_secret: FUB_CLIENT_SECRET,
-      }),
+      body: tokenBody.toString(),
     });
 
+    const tokenResponseText = await tokenResponse.text();
+    console.log('🔄 [FUB Callback] Token response status:', tokenResponse.status);
+    console.log('🔄 [FUB Callback] Token response body:', tokenResponseText);
+
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('❌ [FUB Callback] Token exchange failed:', errorText);
+      const errorText = tokenResponseText;
+      let parsedError: Record<string, unknown> | null = null;
+      try {
+        parsedError = JSON.parse(errorText);
+      } catch (_) {
+        // Keep raw text if provider didn't return JSON.
+      }
+
+      const providerDescription =
+        (parsedError?.error_description as string | undefined) ||
+        (parsedError?.message as string | undefined) ||
+        errorText;
+
+      const isInvalidOrExpiredCode =
+        (parsedError?.error as string | undefined) == 'invalid_grant' ||
+        providerDescription.toLowerCase().includes('expired') ||
+        providerDescription.toLowerCase().includes('invalid code');
+
+      console.error('❌ [FUB Callback] Token exchange failed:', providerDescription);
+      const safeError = encodeURIComponent(errorText.slice(0, 300));
       return new Response(
         `<!DOCTYPE html>
 <html>
@@ -207,10 +261,11 @@ serve(async (req) => {
 </head>
 <body>
   <h1 class="error">Connection Failed</h1>
-  <p>Failed to exchange authorization code for tokens.</p>
+  <p>${isInvalidOrExpiredCode ? 'Authorization code is invalid or expired. Please reconnect and try again.' : 'Failed to exchange authorization code for tokens.'}</p>
+  <p style="font-size:12px;color:#bbb;max-width:600px;margin:16px auto;word-break:break-word;">${errorText.slice(0, 300)}</p>
   <script>
     setTimeout(() => {
-      window.location.href = 'realtoros://oauth-callback?error=${encodeURIComponent('Token exchange failed')}';
+      window.location.href = 'realtoros://oauth-callback?error=${safeError}';
       setTimeout(() => window.close(), 1000);
     }, 2000);
   </script>
@@ -223,7 +278,7 @@ serve(async (req) => {
       );
     }
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = JSON.parse(tokenResponseText);
     const accessToken = tokenData.access_token;
     const refreshToken = tokenData.refresh_token;
     const expiresIn = tokenData.expires_in || 3600; // Default to 1 hour if not provided
@@ -244,7 +299,7 @@ serve(async (req) => {
       .upsert(
         {
           user_id: userId, // user.id from public.users (single source of truth)
-          provider: 'follow_up_boss', // Using snake_case as per table structure
+          provider: 'followupboss',
           access_token: accessToken,
           refresh_token: refreshToken,
           expires_at: expiresAt.toISOString(),
@@ -292,7 +347,12 @@ serve(async (req) => {
 
     console.log('✅ [FUB Callback] Connection saved successfully for user:', userId);
 
-    // Step 3: Return auto-closing HTML response with deep link
+    // Step 3: Return success HTML that redirects back to the Flutter Web app.
+    // Read the app URL from env so it can be overridden without a code deploy.
+    // Falls back to the Firebase Hosting default domain.
+    const FLUTTER_WEB_URL =
+      Deno.env.get('FLUTTER_WEB_URL') ?? 'https://realtor--os.web.app';
+
     return new Response(
       `<!DOCTYPE html>
 <html>
@@ -301,13 +361,9 @@ serve(async (req) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Successfully Connected!</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
       color: #ffffff;
       display: flex;
@@ -316,60 +372,45 @@ serve(async (req) => {
       min-height: 100vh;
       padding: 20px;
     }
-    .container {
-      text-align: center;
-      max-width: 400px;
-      width: 100%;
-    }
+    .container { text-align: center; max-width: 420px; width: 100%; }
     .success-icon {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 30px;
+      width: 80px; height: 80px;
+      margin: 0 auto 28px;
       background: #10b981;
       border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: scaleIn 0.5s ease-out;
+      display: flex; align-items: center; justify-content: center;
+      animation: scaleIn 0.45s ease-out;
     }
     .success-icon::before {
-      content: '✓';
-      font-size: 48px;
-      color: white;
-      font-weight: bold;
+      content: '\\2713'; font-size: 46px; color: white; font-weight: bold;
     }
     @keyframes scaleIn {
-      from {
-        transform: scale(0);
-        opacity: 0;
-      }
-      to {
-        transform: scale(1);
-        opacity: 1;
-      }
+      from { transform: scale(0); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
     }
-    h1 {
-      font-size: 28px;
-      margin-bottom: 15px;
-      color: #10b981;
+    h1 { font-size: 26px; margin-bottom: 12px; color: #10b981; }
+    p  { font-size: 15px; line-height: 1.6; color: #d1d5db; margin-bottom: 20px; }
+    .progress {
+      width: 100%; height: 3px;
+      background: #333;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 24px;
     }
-    p {
-      font-size: 16px;
-      line-height: 1.6;
-      color: #d1d5db;
-      margin-bottom: 30px;
+    .progress-bar {
+      height: 100%; width: 0%;
+      background: #10b981;
+      border-radius: 2px;
+      animation: fill 2s linear forwards;
     }
-    .loading-dots {
+    @keyframes fill { to { width: 100%; } }
+    .manual-link {
       display: inline-block;
-    }
-    .loading-dots::after {
-      content: '...';
-      animation: dots 1.5s steps(4, end) infinite;
-    }
-    @keyframes dots {
-      0%, 20% { content: '.'; }
-      40% { content: '..'; }
-      60%, 100% { content: '...'; }
+      margin-top: 20px;
+      color: #10b981;
+      font-size: 13px;
+      text-decoration: underline;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -377,41 +418,31 @@ serve(async (req) => {
   <div class="container">
     <div class="success-icon"></div>
     <h1>Successfully Connected!</h1>
-    <p>Follow Up Boss has been connected to your account.</p>
-    <p>Returning to Realtor OS<span class="loading-dots"></span></p>
+    <p>Follow Up Boss has been linked to your Realtor OS account.</p>
+    <p id="status">Returning to Realtor OS&#8230;</p>
+    <div class="progress"><div class="progress-bar"></div></div>
+    <a class="manual-link" href="${FLUTTER_WEB_URL}/#/fub-success">
+      Click here if you are not redirected automatically
+    </a>
   </div>
   <script>
-    // Try to open deep link to trigger Flutter UI refresh
-    function openDeepLink() {
-      const deepLink = 'realtoros://fub-success';
-      console.log('Attempting to open deep link:', deepLink);
-      
-      // Try multiple methods to open the deep link
-      window.location.href = deepLink;
-      
-      // Fallback: try opening in a new window/tab
-      setTimeout(() => {
-        const link = document.createElement('a');
-        link.href = deepLink;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }, 500);
+    // Flutter Web deep-link destination (hash-based routing).
+    // Flutter reads Uri.base.fragment === '/fub-success' on load and shows
+    // the "Connected successfully" snackbar + refreshes CRM state.
+    var webDeepLink = ${JSON.stringify(FLUTTER_WEB_URL)} + '/#/fub-success';
+
+    // Notify opener tab if this was opened as a popup (legacy popup flow).
+    if (window.opener) {
+      try { window.opener.postMessage({ type: 'fub-success' }, '*'); } catch(e) {}
     }
-    
-    // Open deep link immediately
-    openDeepLink();
-    
-    // Close window after 2 seconds
-    setTimeout(() => {
-      console.log('Closing window...');
-      window.close();
-      
-      // Fallback: if window.close() doesn't work, try to redirect
-      setTimeout(() => {
-        window.location.href = 'about:blank';
-      }, 500);
+
+    // Redirect to the Flutter Web app after 2 s.
+    // Using replace() instead of href so the callback page is removed from
+    // browser history (back button won't return here).
+    // NOTE: we do NOT attempt realtoros:// here — custom-scheme navigation
+    // silently stalls the page on desktop browsers and blocks this redirect.
+    setTimeout(function() {
+      window.location.replace(webDeepLink);
     }, 2000);
   </script>
 </body>

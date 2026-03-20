@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../layout/main_layout.dart';
 import '../utils/app_styles.dart';
-import 'widgets/agent_detail_header.dart';
+import '../widgets/agent_detail_header.dart';
 import 'agent_detail_profile_screen.dart';
 import 'agent_spend_summary_compact_screen.dart';
 import 'agent_tasks_queue_screen.dart';
