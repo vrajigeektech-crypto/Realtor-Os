@@ -91,9 +91,10 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
   }
 
   void _showInsufficientBalanceDialog(int requiredTokens) {
+    final navigator = Navigator.of(context);
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
         title: const Text('Insufficient Balance', style: TextStyle(color: Colors.white)),
         content: Column(
@@ -109,16 +110,15 @@ class _ReviewRecommendationScreenState extends State<ReviewRecommendationScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => navigator.pop(),
             child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.pushReplacement(
-                context,
+              navigator.pop();
+              navigator.pushReplacement(
                 MaterialPageRoute(
-                  builder: (context) => const MainLayout(activeIndex: 2, child: SizedBox()),
+                  builder: (context) => const MainLayoutWrapper(activeIndex: 2),
                 ),
               );
             },

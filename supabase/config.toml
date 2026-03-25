@@ -39,3 +39,13 @@ entrypoint = "./functions/create-checkout-session/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/stripe-webhook/index.ts"
+
+[functions.forgot-password-send-otp]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/forgot-password-send-otp/index.ts"
+
+[functions.forgot-password-complete]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/forgot-password-complete/index.ts"

@@ -3,7 +3,36 @@ import 'supabase_service.dart';
 
 class OnboardingService {
   static const String _usersTable = 'users';
-  
+
+  /// Ensures a `public.users` row exists after email/password signup once a session is present
+  /// (including after the user confirms email via link). Safe to call repeatedly.
+  static Future<void> ensureUserRowExists() async {
+    final user = SupabaseService.instance.client.auth.currentUser;
+    final session = SupabaseService.instance.client.auth.currentSession;
+    if (user == null || session == null) return;
+
+    final email = user.email ?? '';
+    try {
+      // Omit onboarding flags so upsert does not wipe completed onboarding.
+      await SupabaseService.instance.client.from(_usersTable).upsert(
+        {
+          'id': user.id,
+          'email': email,
+          'role': 'agent',
+          'status': 'active',
+          'is_deleted': false,
+          'created_at': DateTime.now().toIso8601String(),
+          'joined_at': DateTime.now().toIso8601String(),
+          'last_activity_date': DateTime.now().toIso8601String(),
+          'gallery_count': 0,
+        },
+        onConflict: 'id',
+      );
+    } catch (e) {
+      debugPrint('⚠️ [OnboardingService] ensureUserRowExists: $e');
+    }
+  }
+
   static Future<bool> isOnboardingCompleted() async {
     try {
       final user = SupabaseService.instance.client.auth.currentUser;

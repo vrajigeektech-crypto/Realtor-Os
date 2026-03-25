@@ -11,13 +11,7 @@ class SupabaseConfig {
     serverClientId: '190643825007-2jvmhqtpevtc47tph5fjfkbfkk3uk8lq.apps.googleusercontent.com',
   );
 
-  static Future<void> initialize() async {
-    await Supabase.initialize(
-      url: supabaseUrl,
-      anonKey: supabaseAnonKey,
-    );
-  }
-
+  /// Use [SupabaseService.instance.initialize] at app startup (includes auth options).
   static SupabaseClient get client => Supabase.instance.client;
   static GoogleSignIn get googleSignIn => _googleSignIn;
 

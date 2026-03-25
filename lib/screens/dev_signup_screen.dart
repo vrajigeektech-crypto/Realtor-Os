@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 import '../services/google_auth_service.dart';
 import 'onboarding_screen.dart';
+import 'email_verification_screen.dart';
 
 // DEV ONLY - REMOVE BEFORE PRODUCTION
 class DevSignupScreen extends StatefulWidget {
@@ -19,7 +21,29 @@ class _DevSignupScreenState extends State<DevSignupScreen> {
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   String? _errorMessage;
+  String? _successMessage;
   final GoogleAuthService _googleAuthService = GoogleAuthService();
+
+  Map<String, dynamic> _agentProfileRow({
+    required String id,
+    required String email,
+  }) {
+    final now = DateTime.now().toIso8601String();
+    return {
+      'id': id,
+      'email': email,
+      'role': 'agent',
+      'status': 'active',
+      'onboarded': false,
+      'onboarding_completed': false,
+      'onboarding_step': 0,
+      'is_deleted': false,
+      'created_at': now,
+      'joined_at': now,
+      'last_activity_date': now,
+      'gallery_count': 0,
+    };
+  }
 
   @override
   void dispose() {
@@ -45,6 +69,7 @@ class _DevSignupScreenState extends State<DevSignupScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _successMessage = null;
     });
 
     try {
@@ -53,7 +78,7 @@ class _DevSignupScreenState extends State<DevSignupScreen> {
       
       debugPrint('🔐 [Dev Signup] Attempting sign up for: $email');
       
-      // Create auth user
+      // Create auth user with email confirmation enabled
       final response = await supabase.auth.signUp(
         email: email,
         password: _passwordController.text,
@@ -72,47 +97,27 @@ class _DevSignupScreenState extends State<DevSignupScreen> {
       }
 
       debugPrint('✅ [Dev Signup] Auth user created: ${user.id}');
-      
-      // Upsert into public.users table
-      try {
-        await supabase.from('users').upsert(
-          {
-            'id': user.id,
-            'email': email,
-            'role': 'agent',
-            'status': 'active',
-            'onboarded': false,
-            'onboarding_completed': false,
-            'onboarding_step': 0,
-            'is_deleted': false,
-            'created_at': DateTime.now().toIso8601String(),
-            'joined_at': DateTime.now().toIso8601String(),
-            'last_activity_date': DateTime.now().toIso8601String(),
-            'gallery_count': 0,
-          },
-          onConflict: 'id',
-        );
-        debugPrint('✅ [Dev Signup] public.users record created/updated');
-      } catch (dbError) {
-        debugPrint('❌ [Dev Signup] Database upsert error: $dbError');
-        // Continue anyway - user is authenticated
-      }
 
-      // Wait for session if not immediately available
-      if (session == null) {
-        debugPrint('⚠️ [Dev Signup] No session immediately available, waiting...');
-        await Future.delayed(const Duration(seconds: 1));
+      // Don't create user record yet - wait for email verification
+      debugPrint('⚠️ [Dev Signup] User record will be created after email verification');
+
+      // Check if we have a session (email confirmation disabled) or not (email confirmation enabled)
+      final Session? activeSession = session ?? supabase.auth.currentSession;
+      
+      if (activeSession == null) {
+        debugPrint('✅ [Dev Signup] Email confirmation required - redirecting to verification screen');
+        setState(() {
+          _isLoading = false;
+        });
         
-        // Try to get current session
-        final currentSession = supabase.auth.currentSession;
-        if (currentSession == null) {
-          debugPrint('❌ [Dev Signup] Still no session after wait');
-          setState(() {
-            _errorMessage = 'Sign up succeeded but session not available. Please try logging in.';
-            _isLoading = false;
-          });
-          return;
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => EmailVerificationScreen(email: email),
+            ),
+          );
         }
+        return;
       }
 
       debugPrint('✅ [Dev Signup] Sign up successful');
@@ -172,6 +177,7 @@ class _DevSignupScreenState extends State<DevSignupScreen> {
     setState(() {
       _isGoogleLoading = true;
       _errorMessage = null;
+      _successMessage = null;
     });
 
     try {
@@ -180,26 +186,34 @@ class _DevSignupScreenState extends State<DevSignupScreen> {
       if (result.success) {
         debugPrint('✅ [Google] Sign-in successful for signup');
         
-        // Create user record in database if needed
         final user = result.authResponse.user;
+        
+        // Check if email is verified (Google accounts are typically pre-verified)
+        if (user != null && user.emailConfirmedAt == null) {
+          debugPrint('⚠️ [Google] Email not verified - redirecting to verification screen');
+          setState(() {
+            _isGoogleLoading = false;
+          });
+          
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => EmailVerificationScreen(email: user.email ?? ''),
+              ),
+            );
+          }
+          return;
+        }
+        
+        // Create user record in database only for verified users
         if (user != null) {
           try {
             final supabase = SupabaseService.instance.client;
             await supabase.from('users').upsert(
-              {
-                'id': user.id,
-                'email': user.email,
-                'role': 'agent',
-                'status': 'active',
-                'onboarded': false,
-                'onboarding_completed': false,
-                'onboarding_step': 0,
-                'is_deleted': false,
-                'created_at': DateTime.now().toIso8601String(),
-                'joined_at': DateTime.now().toIso8601String(),
-                'last_activity_date': DateTime.now().toIso8601String(),
-                'gallery_count': 0,
-              },
+              _agentProfileRow(
+                id: user.id,
+                email: user.email ?? '',
+              ),
               onConflict: 'id',
             );
             debugPrint('✅ [Google] User record created/updated in database');
@@ -452,6 +466,22 @@ class _DevSignupScreenState extends State<DevSignupScreen> {
                       child: Text(
                         _errorMessage!,
                         style: const TextStyle(color: Colors.red, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                  if (_successMessage != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.withOpacity(0.4)),
+                      ),
+                      child: Text(
+                        _successMessage!,
+                        style: const TextStyle(color: Color(0xFF81C784), fontSize: 12),
                         textAlign: TextAlign.center,
                       ),
                     ),

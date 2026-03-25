@@ -104,7 +104,7 @@ class _MainLayoutState extends State<MainLayout> {
       await SupabaseService.instance.client.auth.signOut();
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
-          '/admin_login',
+          '/login',
           (Route<dynamic> route) => false,
         );
       }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../auth_recovery_launch.dart';
 import '../services/supabase_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -33,53 +34,59 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
 
     try {
-      final supabase = SupabaseService.instance.client;
       final email = _emailController.text.trim();
-      
-      debugPrint('🔐 [ForgotPassword] Sending reset email to: $email');
-      
-      await supabase.auth.resetPasswordForEmail(
-        email,
-        redirectTo: 'demo://reset-callback/',
+      final redirectTo = AuthRecoveryLaunch.passwordResetRedirectUrl();
+
+      debugPrint(
+        '🔐 [ForgotPassword] Supabase resetPasswordForEmail → $email '
+        '(redirectTo: $redirectTo)',
       );
 
-      debugPrint('✅ [ForgotPassword] Reset email sent successfully');
-      
+      await SupabaseService.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: redirectTo,
+      );
+
+      debugPrint('✅ [ForgotPassword] Reset email requested');
+
       setState(() {
-        _successMessage = 'Password reset instructions have been sent to your email.';
+        _successMessage =
+            'If an account exists for this email, we sent a reset link. '
+            'Open it on this device to choose a new password (check spam).';
         _isLoading = false;
       });
     } catch (e) {
       debugPrint('❌ [ForgotPassword] Failed to send reset email: $e');
-      
+
       String userMessage = 'Failed to send reset email. Please try again.';
-      
+
       final errorString = e.toString();
-      
-      if (errorString.contains('User not found')) {
-        userMessage = 'No account found with this email address.';
-      } else if (errorString.contains('Network') || errorString.contains('connection')) {
+
+      if (errorString.contains('Network') || errorString.contains('connection')) {
         userMessage = 'Network error. Please check your internet connection.';
-      } else if (errorString.contains('rate limit') || errorString.contains('too many requests')) {
+      } else if (errorString.contains('rate limit') ||
+          errorString.contains('too many requests')) {
         userMessage = 'Too many requests. Please wait a few minutes before trying again.';
       } else {
         final cleanError = errorString
             .replaceAll('Exception: ', '')
             .replaceAll('AuthException: ', '')
             .replaceAll('message: ', '');
-        
+
         if (cleanError.contains('"message"')) {
           try {
-            final messageMatch = RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(cleanError);
+            final messageMatch =
+                RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(cleanError);
             if (messageMatch != null) {
               userMessage = messageMatch.group(1) ?? userMessage;
             }
           } catch (_) {}
-        } else if (cleanError.length < 100) {
+        } else if (cleanError.length <= 400 &&
+            !cleanError.toLowerCase().contains('stacktrace')) {
           userMessage = cleanError;
         }
       }
-      
+
       setState(() {
         _errorMessage = userMessage;
         _isLoading = false;
@@ -119,12 +126,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Icon(
-                    Icons.lock_reset,
+                    Icons.mark_email_read_outlined,
                     size: 80,
                     color: Color(0xFFd4a574),
                   ),
                   const SizedBox(height: 24),
-                  
                   const Text(
                     'Forgot Your Password?',
                     style: TextStyle(
@@ -135,9 +141,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
-                  
                   const Text(
-                    'Enter your email address and we\'ll send you instructions to reset your password.',
+                    'Enter your email and we\'ll send you a link to set a new password. '
+                    'The link opens this app on the same device.',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 14,
@@ -146,8 +152,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 48),
-                  
-                  // Email Field
                   TextFormField(
                     controller: _emailController,
                     decoration: const InputDecoration(
@@ -173,7 +177,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       return null;
                     },
                   ),
-                  
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 16),
                     Container(
@@ -190,27 +193,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       ),
                     ),
                   ],
-                  
                   if (_successMessage != null) ...[
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.2),
+                        color: Colors.green.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
                       ),
                       child: Text(
                         _successMessage!,
-                        style: const TextStyle(color: Colors.green, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.green.shade200,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),
                   ],
-                  
                   const SizedBox(height: 32),
-                  
-                  // Reset Password Button
                   ElevatedButton(
                     onPressed: _isLoading ? null : _handleResetPassword,
                     style: ElevatedButton.styleFrom(
@@ -228,14 +231,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             ),
                           )
                         : const Text(
-                            'Send Reset Instructions',
+                            'Send reset link',
                             style: TextStyle(fontSize: 16),
                           ),
                   ),
-                  
                   const SizedBox(height: 24),
-                  
-                  // Back to Login
                   TextButton(
                     onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
                     child: const Text(

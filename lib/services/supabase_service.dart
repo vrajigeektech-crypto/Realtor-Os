@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:fetch_client/fetch_client.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'rpc_client.dart';
 
@@ -29,6 +30,16 @@ class SupabaseService {
       await Supabase.initialize(
         url: supabaseUrl,
         anonKey: supabaseAnonKey,
+        // Default package:http on web often surfaces Edge Function calls as
+        // ClientException: Failed to fetch; Fetch + CORS mode matches Supabase guidance.
+        httpClient: kIsWeb ? FetchClient(mode: RequestMode.cors) : null,
+        authOptions: const FlutterAuthClientOptions(
+          // PKCE stores a code_verifier on the device that did signUp; email links
+          // often open in a mail client / browser context where that verifier is
+          // missing, so confirmation never completes. Implicit puts tokens in the
+          // redirect URL so getSessionFromUrl works after the user opens the link.
+          authFlowType: AuthFlowType.implicit,
+        ),
       );
       _client = Supabase.instance.client;
       _rpcClient = RpcClient();

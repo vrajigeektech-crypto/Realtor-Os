@@ -1,5 +1,4 @@
 import 'package:demo/admin_pannel/admin_main_screen.dart';
-import 'package:demo/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
@@ -195,7 +194,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
           SizedBox(height: 24),
           InkWell(
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => LoginScreen(),));
+              Navigator.of(context).pushNamed('/login');
             },
             child: Text(
               'Login As User',

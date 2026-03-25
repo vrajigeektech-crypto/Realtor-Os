@@ -1,10 +1,12 @@
 import 'package:demo/admin_pannel/admin_login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../auth_app_bridge.dart';
 import '../services/supabase_service.dart';
 import '../services/google_auth_service.dart';
 import 'dev_signup_screen.dart';
 import 'forgot_password_screen.dart';
+import 'email_verification_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
@@ -69,8 +71,58 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('   - Email: ${user?.email ?? "null"}');
       debugPrint('   - Access token exists: ${session.accessToken.isNotEmpty}');
 
+      // Check if email is verified
+      if (user != null && user.emailConfirmedAt == null) {
+        debugPrint('⚠️ [Login] Email not verified - redirecting to verification screen');
+        setState(() {
+          _isLoading = false;
+        });
+        
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => EmailVerificationScreen(email: user.email ?? ''),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Create user record if it doesn't exist (for verified users)
+      if (user != null) {
+        try {
+          final supabase = SupabaseService.instance.client;
+          final now = DateTime.now().toIso8601String();
+          
+          // Do not set onboarding_* / onboarded here — upsert would reset them on
+          // every login and force completed users back through onboarding.
+          await supabase.from('users').upsert({
+            'id': user.id,
+            'email': user.email ?? '',
+            'role': 'agent',
+            'status': 'active',
+            'is_deleted': false,
+            'created_at': now,
+            'joined_at': now,
+            'last_activity_date': now,
+            'gallery_count': 0,
+          }, onConflict: 'id');
+          
+          debugPrint('✅ [Login] User record created/updated in database');
+        } catch (dbError) {
+          debugPrint('⚠️ [Login] Database upsert error: $dbError');
+          // Continue with login even if database update fails
+        }
+      }
+
       if (mounted) {
-        widget.onLoginSuccess?.call();
+        setState(() => _isLoading = false);
+        if (widget.onLoginSuccess != null) {
+          widget.onLoginSuccess!();
+        } else {
+          refreshAppAfterAuth?.call();
+        }
+        resetNavigatorToMatchHome();
       }
     } catch (e) {
       debugPrint('❌ [Login] Sign in failed: $e');
@@ -121,8 +173,59 @@ class _LoginScreenState extends State<LoginScreen> {
       
       if (result.success) {
         debugPrint('✅ [Google] Sign-in successful');
+        
+        final user = result.authResponse.user;
+        
+        // Check if email is verified (Google accounts are typically pre-verified)
+        if (user != null && user.emailConfirmedAt == null) {
+          debugPrint('⚠️ [Google] Email not verified - redirecting to verification screen');
+          setState(() {
+            _isGoogleLoading = false;
+          });
+          
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => EmailVerificationScreen(email: user.email ?? ''),
+              ),
+            );
+          }
+          return;
+        }
+        
+        // Create user record in database for verified users
+        if (user != null) {
+          try {
+            final supabase = SupabaseService.instance.client;
+            final now = DateTime.now().toIso8601String();
+            
+            await supabase.from('users').upsert({
+              'id': user.id,
+              'email': user.email ?? '',
+              'role': 'agent',
+              'status': 'active',
+              'is_deleted': false,
+              'created_at': now,
+              'joined_at': now,
+              'last_activity_date': now,
+              'gallery_count': 0,
+            }, onConflict: 'id');
+            
+            debugPrint('✅ [Google] User record created/updated in database');
+          } catch (dbError) {
+            debugPrint('⚠️ [Google] Database upsert error: $dbError');
+            // Continue with login even if database update fails
+          }
+        }
+        
         if (mounted) {
-          widget.onLoginSuccess?.call();
+          setState(() => _isGoogleLoading = false);
+          if (widget.onLoginSuccess != null) {
+            widget.onLoginSuccess!();
+          } else {
+            refreshAppAfterAuth?.call();
+          }
+          resetNavigatorToMatchHome();
         }
       } else if (result.cancelled) {
         debugPrint('⚠️ [Google] Sign-in cancelled');

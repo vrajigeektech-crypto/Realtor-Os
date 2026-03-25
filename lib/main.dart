@@ -10,7 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:get/get.dart';
+import 'auth_app_bridge.dart';
+import 'auth_recovery_launch.dart';
 import 'screens/login_screen.dart';
+import 'screens/new_password_screen.dart';
 import 'admin_pannel/admin_login_screen.dart';
 import 'core/app_colors.dart';
 import 'theme/app_theme.dart';
@@ -19,7 +22,6 @@ import 'services/onboarding_service.dart';
 import 'services/balance_service.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/market_place_screen.dart';
-import 'screens/reset_password_screen.dart';
 import 'supabase_config.dart';
 import 'web_file_input.dart';
 import 'screens/controller/auth_controller.dart';
@@ -50,11 +52,14 @@ void main() async {
 
   if (kIsWeb) registerWebFileInputs();
 
-  await SupabaseConfig.initialize();
   await SupabaseService.instance.initialize(
     supabaseUrl: SupabaseConfig.supabaseUrl,
     supabaseAnonKey: SupabaseConfig.supabaseAnonKey,
   );
+
+  final authClient = SupabaseService.instance.client;
+  await AuthRecoveryLaunch.consumeWebRecoveryUri(authClient);
+  await AuthRecoveryLaunch.consumeInitialAppLinkIfRelevant(authClient);
 
   // Initialize Stripe
   await StripeService.initialize();
@@ -84,6 +89,8 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
   @override
   void initState() {
     super.initState();
+    registerRootNavigator(_navigatorKey);
+    refreshAppAfterAuth = _checkStatus;
     _checkStatus();
     _initDeepLinks();
     // Listen for auth changes to update UI automatically
@@ -91,9 +98,8 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       debugPrint('🔔 [Main] Auth state changed: ${data.event}');
       if (data.event == AuthChangeEvent.passwordRecovery) {
         debugPrint('🔐 [Main] Password recovery event detected');
-        _navigatorKey.currentState?.push(
-          MaterialPageRoute(builder: (context) => const ResetPasswordScreen()),
-        );
+        AuthRecoveryLaunch.activate();
+        if (mounted) setState(() {});
       } else if (mounted) {
         _checkStatus();
       }
@@ -110,6 +116,15 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
     _sub = AppLinks().uriLinkStream.listen((Uri? uri) {
       if (uri == null) return;
       log("Deep link: $uri");
+
+      if (uri.scheme == 'realtoros' && uri.host == 'reset-password') {
+        AuthRecoveryLaunch.consumeUriForRecovery(
+          SupabaseService.instance.client,
+          uri,
+        ).then((_) {
+          if (mounted) setState(() {});
+        });
+      }
 
       if (uri.host == 'payment-success') {
         final sessionId = uri.queryParameters['session_id'];
@@ -231,6 +246,8 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
       if (session != null) {
         _onboardingCompleted = await OnboardingService.isOnboardingCompleted();
         debugPrint('📋 [Main] Onboarding completed: $_onboardingCompleted');
+      } else {
+        _onboardingCompleted = false;
       }
     } catch (e) {
       debugPrint('⚠️ [Main] Error checking status: $e');
@@ -265,6 +282,29 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
     }
   }
 
+  Widget _homeForAuthState() {
+    final client = SupabaseService.instance.client;
+    final session = client.auth.currentSession;
+    final user = client.auth.currentUser;
+    if (session != null &&
+        user != null &&
+        AuthRecoveryLaunch.isActive) {
+      return NewPasswordScreen(
+        email: user.email ?? '',
+        resetOtp: null,
+      );
+    }
+    if (session == null) {
+      return LoginScreen(
+        onLoginSuccess: () => refreshAppAfterAuth?.call(),
+      );
+    }
+    if (!_onboardingCompleted) {
+      return OnboardingScreen();
+    }
+    return MainLayoutWrapper(activeIndex: 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
@@ -277,15 +317,11 @@ class _RealtorOSAppState extends State<RealtorOSApp> {
               backgroundColor: AppColors.background,
               body: Center(child: CircularProgressIndicator()),
             )
-          : SupabaseService.instance.client.auth.currentSession == null
-          // ? AdminLoginScreen()
-          ? LoginScreen(onLoginSuccess: () => _checkStatus())
-          : !_onboardingCompleted
-          ? Expanded(child: OnboardingScreen())
-          // : AdminLoginScreen(),
-          // : AdminMainScreen(),
-          : MainLayoutWrapper(activeIndex: 0),
+          : _homeForAuthState(),
       routes: {
+        '/login': (context) => LoginScreen(
+              onLoginSuccess: () => refreshAppAfterAuth?.call(),
+            ),
         '/admin_login': (context) => const AdminLoginScreen(),
         // Follow Up Boss Web OAuth callback
         '/oauth/callback': (context) => const OAuthCallbackScreen(),
